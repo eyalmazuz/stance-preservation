@@ -644,8 +644,8 @@ def compute_stance_preservation_with_topic(dataset, model, tokenizer):
             art_entropy = Categorical(probs=article_tensor).entropy()
             
             # Skip if entropy is too high (uncertain predictions)
-            # if sum_entropy > ln(num_classes) / 2 or art_entropy > ln(num_classes) / 2:
-            #     continue
+            if sum_entropy > ln(num_classes) / 2 or art_entropy > ln(num_classes) / 2:
+                continue
             
             # Calculate EMD (Earth Mover's Distance)
             model_probabilities_f64 = np.asarray(summary_probs, dtype=np.float64)

@@ -34,6 +34,11 @@ if __name__ == '__main__':
     parser.add_argument("--top-k-matches", type=int, default=1, help="Number of top matches to consider.")
     parser.add_argument("--save-matches", action="store_true", help="Save matching results to CSV.")
     parser.add_argument("--output-dir", default="./scripts/output/stance_preservation_test.json", help="Save stance preservation results to JSON.")
+    parser.add_argument(
+        "--topic_detection_model", 
+        default="dicta-il/dictalm2.0", 
+        help="dicta-il/dictalm2.0 or finetuned or huggingface model path (e.g. google/gemma-2-9b)"
+        )
     args = parser.parse_args()
 
     # Topic detection setup
@@ -130,8 +135,8 @@ if __name__ == '__main__':
                 article_sent = sent.article_sentences[0][0]  # Get first sentence from first match
                 summary_sent = sent.summary_sentence
 
-                art_res = get_topic_for_model(results_data[idx]["Article"], article_sent, topic_model, topic_tokenizer)
-                sum_res = get_topic_for_model(results_data[idx]["Summary"], summary_sent, topic_model, topic_tokenizer)
+                art_res = get_topic_for_model(results_data[idx]["Article"], article_sent, topic_model, topic_tokenizer, args.topic_detection_model)
+                sum_res = get_topic_for_model(results_data[idx]["Summary"], summary_sent, topic_model, topic_tokenizer, args.topic_detection_model)
 
                 # Check topic similarity
                 if art_res["topic"] == sum_res["topic"]:

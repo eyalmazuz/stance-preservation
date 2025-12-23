@@ -22,6 +22,7 @@ if __name__ == "__main__":
     # model_output_path = "./scripts/output/test_entropy_merged.csv"
     # model_output_path = "./scripts/output/test_topic_merged.csv"
     model_output_path = "./scripts/output/fine_tuned_test_merged.csv"
+    # model_output_path = "./scripts/output/stance_noentropy_emd_merged.csv"
 
 
     # Load CSVs
