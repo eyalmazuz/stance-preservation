@@ -178,9 +178,9 @@ if __name__ == "__main__":
         print(f"CUDA device count: {torch.cuda.device_count()}")
         print(f"Current CUDA device: {torch.cuda.current_device()}")
 
-    # python -m scripts.stance_detection_model --data ./Data/topic_stance_dataset.csv --output_dir ./models/stance_detection_model 
+    # python -m scripts.stance_detection_model --data ./Data/datasets/topic_stance_dataset.csv --output_dir ./models/stance_detection_model 
     parser = argparse.ArgumentParser(description="Fine-Tune dictalm2.0.")
-    parser.add_argument("--data", type=str, required=True, help="Dataset path ('./Data/topic_stance_dataset.csv').")
+    parser.add_argument("--data", type=str, required=True, help="Dataset path ('./Data/datasets/topic_stance_dataset.csv').")
     parser.add_argument("--model", type=str, default="dicta-il/dictabert-sentiment", help="Model name for finetuning.")
     parser.add_argument("--output_dir", type=str, required=True, help="Output directory for the model.")
     parser.add_argument("--num_trials", type=int, default=10, help="Number of trials for Optuna hyperparameter search.")

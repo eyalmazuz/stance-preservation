@@ -19,7 +19,7 @@ print(f"Using device: {device}")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Run article and summary matching.")
-    parser.add_argument("--data", type=str, required=True, help="Dataset path (e.g., ./Data/Hebrew_stance_dataset_combined.csv).")
+    parser.add_argument("--data", type=str, required=True, help="Dataset path (e.g., ./Data/datasets/Hebrew_stance_dataset_combined.csv).")
     parser.add_argument("--model", type=str, default="dicta-il/dictabert-sentiment", help="Model name for finetuning.")
     parser.add_argument("--output_dir", type=str, required=True, help="Output directory for the model.")
     parser.add_argument("--num_trials", type=int, default=10, help="Number of trials for Optuna hyperparameter search.")
