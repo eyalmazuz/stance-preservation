@@ -390,9 +390,9 @@ if __name__ == "__main__":
     # combined_df.to_csv('./Data/topic_stance_dataset_combined.csv', index=False)
     # print(f"Combined dataset contains {len(combined_df)} rows")
 
-    df_comb = pd.read_csv('./Data/topic_stance_dataset_combined.csv')
+    df_comb = pd.read_csv('./Data/datasets/topic_stance_dataset_combined.csv')
     # shuffle the dataframe
     df_comb = df_comb.sample(frac=1).reset_index(drop=True)
     # save the shuffled dataframe
-    df_comb.to_csv('./Data/topic_stance_dataset_combined_shuffled.csv', index=False)
+    df_comb.to_csv('./Data/datasets/topic_stance_dataset_combined_shuffled.csv', index=False)
     print(f"Shuffled dataset contains {len(df_comb)} rows")
