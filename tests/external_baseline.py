@@ -8,29 +8,31 @@ from transformers import pipeline
 from scipy.stats import pearsonr, spearmanr, kendalltau
 
 
-data_path = "./tests/output/labeled_data_with_scores.csv"
+# data_path = "./tests/output/labeled_data_with_scores.csv"
+data_path = "./tests/output/english_labeled_data_with_scores.csv"
 stance_model_name = "joeddav/xlm-roberta-large-xnli"
 
 # Columns in your CSV
-# sum_col = "Summary"
-# art_col = "Article"
-sum_col = "Sentence in Summary"
-art_col = "Best Match Sentences From Article"
+sum_col = "Summary"
+art_col = "Article"
+# sum_col = "Sentence in Summary"
+# art_col = "Best Match Sentences From Article"
 art_topic_col = "article topic"
 sum_topic_col = "summary topic"
 
 # ======= Output label set (Hebrew) =======
 STANCE_LABELS_HE = ["בעד", "נגד", "נייטרלי"]
-STANCE_TO_SCORE_HE = {"בעד": +1.0, "נגד": -1.0, "נייטרלי": 0.0}
+# STANCE_TO_SCORE_HE = {"בעד": +1.0, "נגד": -1.0, "נייטרלי": 0.0}
+STANCE_TO_SCORE_HE = {"Favor": +1.0, "Against": -1.0, "Neutral": 0.0}
 
 # ======= Optional: English candidate labels (more robust sometimes) =======
-USE_EN_CANDIDATES = False
-STANCE_LABELS_EN = ["in favor of", "against", "neutral towards"]
+USE_EN_CANDIDATES = True # False
+STANCE_LABELS_EN = ["Favor", "Against", "Neutral"]
 # mapping from EN prediction -> Hebrew for saving
 EN_TO_HE = {
-    "in favor of": "בעד",
-    "against": "נגד",
-    "neutral towards": "נייטרלי",
+    "Favor": "בעד",
+    "Against": "נגד",
+    "Neutral": "נייטרלי",
 }
 
 def build_stance_classifier():
@@ -63,9 +65,12 @@ def classify_stance(clf, text: str, topic: str = "") -> Tuple[str, float, Dict[s
     """
     Returns (discrete_label_hebrew, expected_score[-1..1], per_label_probs_hebrew)
     where discrete_label_hebrew ∈ {"בעד","נגד","נייטרלי"}.
+    English where discrete_label_hebrew ∈ {"Favor","Against","Neutral"}.
     """
     if not isinstance(text, str) or not text.strip():
-        return ("נייטרלי", 0.0, {"בעד": 0.0, "נגד": 0.0, "נייטרלי": 1.0})
+        # return ("נייטרלי", 0.0, {"בעד": 0.0, "נגד": 0.0, "נייטרלי": 1.0})
+        return ("Neutral", 0.0, {"Favor": 0.0, "Against": 0.0, "Neutral": 1.0})
+    
 
     topic_str = topic.strip() if isinstance(topic, str) else ""
     # Hypothesis templates — Hebrew by default.
@@ -87,20 +92,20 @@ def classify_stance(clf, text: str, topic: str = "") -> Tuple[str, float, Dict[s
     labels = list(res["labels"])
     scores = [float(x) for x in res["scores"]]
 
-    if USE_EN_CANDIDATES:
-        # Map EN -> HE for output and scoring
-        labels_he = [EN_TO_HE[l] for l in labels]
-        value_map = {EN_TO_HE[k]: v for k, v in zip(STANCE_LABELS_EN, [+1.0, -1.0, 0.0])}
-        top_label_he = EN_TO_HE[labels[0]]
-        exp_score = score_distribution_to_expected(labels_he, scores, value_map)
-        probs_he = {lab_he: float(sc) for lab_he, sc in zip(labels_he, scores)}
-        return (top_label_he, exp_score, probs_he)
-    else:
-        value_map = {k: v for k, v in STANCE_TO_SCORE_HE.items()}
-        top_label_he = labels[0]
-        exp_score = score_distribution_to_expected(labels, scores, value_map)
-        probs_he = {lab: float(sc) for lab, sc in zip(labels, scores)}
-        return (top_label_he, exp_score, probs_he)
+    # if USE_EN_CANDIDATES:
+    #     # Map EN -> HE for output and scoring
+    #     labels_he = [EN_TO_HE[l] for l in labels]
+    #     value_map = {EN_TO_HE[k]: v for k, v in zip(STANCE_LABELS_EN, [+1.0, -1.0, 0.0])}
+    #     top_label_he = EN_TO_HE[labels[0]]
+    #     exp_score = score_distribution_to_expected(labels_he, scores, value_map)
+    #     probs_he = {lab_he: float(sc) for lab_he, sc in zip(labels_he, scores)}
+    #     return (top_label_he, exp_score, probs_he)
+    # else:
+    value_map = {k: v for k, v in STANCE_TO_SCORE_HE.items()}
+    top_label_he = labels[0]
+    exp_score = score_distribution_to_expected(labels, scores, value_map)
+    probs_he = {lab: float(sc) for lab, sc in zip(labels, scores)}
+    return (top_label_he, exp_score, probs_he)
     
 
 def corr_table_with_pvals(data, cols, method="pearson"):
@@ -159,12 +164,14 @@ if __name__ == "__main__":
     df["stance_agreement"] = (df["summary_stance_label"] == df["article_stance_label"])
 
     # Save
-    output_path = "./tests/output/external_model_sent_baseline.csv"
+    # output_path = "./tests/output/external_model_sent_baseline.csv"
+    output_path = "./tests/output/english_external_model_sent_baseline.csv"
     df.to_csv(output_path, index=False)
     print(f"Saved stance labels/scores and shifts to {output_path}")
 
 
-    df = pd.read_csv("./tests/output/external_model_sent_baseline.csv")
+    # df = pd.read_csv("./tests/output/external_model_sent_baseline.csv")
+    df = pd.read_csv("./tests/output/english_external_model_sent_baseline.csv")
     cols = ["score", "stance_shift"]
     df_article = df.groupby(["Article"], as_index=False)[cols].mean()
 

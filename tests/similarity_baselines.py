@@ -9,7 +9,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 
 # # Load your labeled dataset
-# df = pd.read_csv("./tests/output/labeled_data_with_scores.csv")
+# # df = pd.read_csv("./tests/output/labeled_data_with_scores.csv")
+# df = pd.read_csv("./tests/output/english_labeled_data_with_scores.csv")
 
 # scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
 
@@ -18,10 +19,10 @@ from sklearn.metrics.pairwise import cosine_similarity
 # model_name = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 # model = SentenceTransformer(model_name)
 
-# sum_col = "Sentence in Summary"
-# art_col = "Best Match Sentences From Article"
-# # sum_col = "Summary"
-# # art_col = "Article"
+# # sum_col = "Sentence in Summary"
+# # art_col = "Best Match Sentences From Article"
+# sum_col = "Summary"
+# art_col = "Article"
 
 # summary_embs = model.encode(df[sum_col].tolist(), batch_size=64, convert_to_numpy=True, show_progress_bar=True, normalize_embeddings=True)
 # article_embs = model.encode(df[art_col].tolist(), batch_size=64, convert_to_numpy=True, show_progress_bar=True, normalize_embeddings=True)
@@ -74,14 +75,19 @@ from sklearn.metrics.pairwise import cosine_similarity
 # # df = df.merge(df_article, on="Article", suffixes=("", "_sent_mean"))
 
 # # df.to_csv("./tests/output/dataset_with_baselines_sent_mean_score.csv", index=False)
-# df.to_csv("./tests/output/dataset_with_baselines_sent.csv", index=False)
+# # df.to_csv("./tests/output/dataset_with_baselines_sent.csv", index=False)
+# # df.to_csv("./tests/output/english_dataset_with_baselines_sent.csv", index=False)
 # # df.to_csv("./tests/output/dataset_with_baselines.csv", index=False)
+# df.to_csv("./tests/output/english_dataset_with_baselines.csv", index=False)
+
 
 
 # Load dataset (with your computed scores + ROUGE + BLEU)
 # df = pd.read_csv("./tests/output/dataset_with_baselines_sent.csv")
-df = pd.read_csv("./tests/output/dataset_with_baselines_sent_mean_score.csv")
+# df = pd.read_csv("./tests/output/english_dataset_with_baselines_sent.csv")
+# df = pd.read_csv("./tests/output/dataset_with_baselines_sent_mean_score.csv")
 # df = pd.read_csv("./tests/output/dataset_with_baselines.csv")
+df = pd.read_csv("./tests/output/english_dataset_with_baselines.csv")
 
 df_match = df[df['summary stance'] == df['article stance']]
 df_no_match = df[df['summary stance'] != df['article stance']]
@@ -92,9 +98,9 @@ df_no_match = df[df['summary stance'] != df['article stance']]
 # df_no_match_art = df_no_match.groupby("Article", as_index=False)
 
 # cols = ["sent_score_sent_mean", "EMB_SIM_sent_mean", "TFIDF_COS_SIM_sent_mean", "ROUGE-1_sent_mean", "ROUGE-2_sent_mean", "ROUGE-L_sent_mean", "BLEU_sent_mean"]
-cols = ["score", "EMB_SIM_sent_mean", "TFIDF_COS_SIM_sent_mean", "ROUGE-1_sent_mean", "ROUGE-2_sent_mean", "ROUGE-L_sent_mean", "BLEU_sent_mean"]
+# cols = ["score", "EMB_SIM_sent_mean", "TFIDF_COS_SIM_sent_mean", "ROUGE-1_sent_mean", "ROUGE-2_sent_mean", "ROUGE-L_sent_mean", "BLEU_sent_mean"]
 # cols = ["sent_score", "EMB_SIM", "TFIDF_COS_SIM", "ROUGE-1", "ROUGE-2", "ROUGE-L", "BLEU"]
-# cols = ["score", "EMB_SIM", "TFIDF_COS_SIM", "ROUGE-1", "ROUGE-2", "ROUGE-L", "BLEU"]
+cols = ["score", "EMB_SIM", "TFIDF_COS_SIM", "ROUGE-1", "ROUGE-2", "ROUGE-L", "BLEU"]
 
 # df = df_no_match
 def corr_with_pvalues(df, cols, method="pearson"):

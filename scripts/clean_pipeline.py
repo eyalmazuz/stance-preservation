@@ -13,7 +13,7 @@ from transformers import (
     AutoTokenizer
     )
 import torch
-from scripts.topic_detection import get_topic_for_model
+from scripts.topic_detection import get_topic_for_model, get_topic_for_model_eng
 import numpy as np
 
 
@@ -25,12 +25,12 @@ if __name__ == '__main__':
         "--data", 
         type=str, 
         required=True, 
-        help="Dataset name (e.g., biunlp/HeSum or custom)."
+        help="Dataset name (e.g., biunlp/HeSum or custom or other text (for csv))."
         )
     
     parser.add_argument(
         "--path", 
-        default="./Data/datasets/summarization-7-heb.jsonl", 
+        default="./Data/datasets/summarization-7-heb.jsonl", # ./Data/datasets/English_all_data_clean.csv
         type=str, 
         help="Path to custom dataset JSON."
         )
@@ -63,8 +63,14 @@ if __name__ == '__main__':
     
     parser.add_argument(
         "--topic_detection_model", 
-        default="dicta-il/dictalm2.0", 
+        default="dicta-il/dictalm2.0", # google/gemma-2-9b
         help="dicta-il/dictalm2.0 or finetuned or huggingface model path (e.g. google/gemma-2-9b)"
+        )
+    
+    parser.add_argument(
+        "--language", 
+        default="Hebrew", # English
+        help="Language of the data (e.g. Hebrew or English)"
         )
     
     args = parser.parse_args()
@@ -91,6 +97,10 @@ if __name__ == '__main__':
         data, results_data = process_and_display_results(dataset, match_fn, dataset_name, args.save_matches, args.threshold, args.top_k_matches)
         print(f"Processed {len(data)} matches")
 
+        # save data as csv
+        data_df = pd.DataFrame(results_data)
+        data_df.to_csv("./Data/datasets/english_labeled_data.csv", index=False)
+
     except Exception as e:
         print(f"Error in sentence matching and data processing: {str(e)}")
         raise
@@ -104,6 +114,7 @@ if __name__ == '__main__':
 
     # Process sentences for topic detection
     try:
+        topic_model_name = args.topic_detection_model
         topic_dataset = []
         total_sentences = len(data)
         
@@ -113,8 +124,12 @@ if __name__ == '__main__':
                 article_sent = sent.article_sentences[0][0]  # Get first sentence from first match
                 summary_sent = sent.summary_sentence
 
-                art_res = get_topic_for_model(results_data[idx]["Article"], article_sent, topic_model, topic_tokenizer, args.topic_detection_model)
-                sum_res = get_topic_for_model(results_data[idx]["Summary"], summary_sent, topic_model, topic_tokenizer, args.topic_detection_model)
+                if args.language == "Hebrew":
+                    art_res = get_topic_for_model(results_data[idx]["Article"], article_sent, topic_model, topic_tokenizer, topic_model_name)
+                    sum_res = get_topic_for_model(results_data[idx]["Summary"], summary_sent, topic_model, topic_tokenizer, topic_model_name)
+                else:  # English
+                    art_res = get_topic_for_model_eng(results_data[idx]["Article"], article_sent, topic_model, topic_tokenizer, topic_model_name)
+                    sum_res = get_topic_for_model_eng(results_data[idx]["Summary"], summary_sent, topic_model, topic_tokenizer, topic_model_name)
 
                 # Check topic similarity
                 if art_res["topic"] == sum_res["topic"]:
@@ -144,9 +159,14 @@ if __name__ == '__main__':
     # Load stance detection model
     try:
         print("Loading stance detection model...")
-        stance_model_name = './models/stance_detection_model_combined/'
-        stance_model = AutoModelForSequenceClassification.from_pretrained(stance_model_name)
-        stance_tokenizer = AutoTokenizer.from_pretrained(stance_model_name)
+        if args.language == "Hebrew":
+            stance_model_name = './models/stance_detection_model_combined/'
+            stance_model = AutoModelForSequenceClassification.from_pretrained(stance_model_name)
+            stance_tokenizer = AutoTokenizer.from_pretrained(stance_model_name)
+        else:  # English
+            stance_model_name = 'bendavidsteel/Qwen3-1.7B-stance-detection'
+            stance_model = AutoModelForSequenceClassification.from_pretrained(stance_model_name, num_labels=3)
+            stance_tokenizer = AutoTokenizer.from_pretrained(stance_model_name)
 
     except Exception as e:
         print(f"Error loading stance detection model: {str(e)}")
@@ -155,7 +175,7 @@ if __name__ == '__main__':
     # Classify stance and compute preservation
     try:
         print("Computing stance preservation...")
-        results = compute_stance_preservation_with_topic(topic_dataset, stance_model, stance_tokenizer)
+        results = compute_stance_preservation_with_topic(topic_dataset, stance_model, stance_tokenizer, args.language)
         
         print(f"Stance preservation computed for {len(results)} sentence pairs")
         

@@ -54,7 +54,8 @@ def corr_with_pvalues(df, cols, method="pearson"):
 
 if __name__ == "__main__":
     # Load dataset
-    df = pd.read_csv("./tests/output/labeled_data_with_scores.csv")
+    # df = pd.read_csv("./tests/output/labeled_data_with_scores.csv")    
+    df = pd.read_csv("./tests/output/english_labeled_data_with_scores.csv")
 
     # sum_col = "Summary"
     # art_col = "Article"
@@ -97,11 +98,13 @@ if __name__ == "__main__":
             print(f"Error processing row {index}: {e}")
             df.at[index, 'LLM_score'] = None
 
-    df.to_csv("./tests/output/labeled_data_with_LLM_sent_scores.csv", index=False)
+    # df.to_csv("./tests/output/labeled_data_with_LLM_sent_scores.csv", index=False)
+    df.to_csv("./tests/output/english_labeled_data_with_LLM_sent_scores.csv", index=False)
 
 
     # compare scores of LLM with our score
-    df = pd.read_csv("./tests/output/labeled_data_with_LLM_sent_scores.csv")
+    # df = pd.read_csv("./tests/output/labeled_data_with_LLM_sent_scores.csv")
+    df = pd.read_csv("./tests/output/english_labeled_data_with_LLM_sent_scores.csv")
     df["LLM_score"] = df["LLM_score"]/9
 
     agg_cols = ["sent_score"]

@@ -50,12 +50,13 @@ def calc_score(group):
         return group
 
 if __name__ == "__main__":
-    path = "./Data/datasets/labeled_data.csv"
+    # path = "./Data/datasets/labeled_data.csv"
+    path = "./Data/datasets/english_labeled_data_completed.csv"
     df = pd.read_csv(path)
 
     df = df.groupby(['Article', 'Summary']).apply(calc_score)
     df['sent_score'] = ((df['summary stance'] == df['article stance']) & (df['summary topic'] == df['article topic'])).astype(int)
-    df.to_csv("./tests/output/labeled_data_with_scores.csv", index=False)
+    df.to_csv("./tests/output/english_labeled_data_with_scores.csv", index=False)
 
     # # Calculate pair-level scores
     # pair_scores = df.groupby(['Article', 'Summary']).apply(calculate_pair_score)

@@ -286,8 +286,9 @@ def process_and_display_results(dataset, match_fn, dataset_name, save_matches=Fa
     """Process and display results for article matching and save to CSV."""
     results_data = []
     metadata_data = []
-    # length = 50
-    length = get_dataset_length(dataset)
+    length = 50
+    # length = 2
+    # length = get_dataset_length(dataset)
     num_chunks = (length + chunk_size - 1) // chunk_size  
 
     # define namedtuple
@@ -574,27 +575,77 @@ def compute_stance_preservation_emd(data, model, tokenizer):
 #     return inputs
 
 
-def classify_stance_with_topic(sentence, topic, model, tokenizer):
+def _label_token_id(tokenizer, label: str) -> int:
+    """
+    Get the token id for a label string as a *single* token.
+    We try a couple of variants (with/without leading space) because many BPE tokenizers
+    encode " FAVOR" as one token but "FAVOR" as multiple.
+    """
+    candidates = [label, " " + label, "\n" + label]
+    best = None
+
+    for c in candidates:
+        ids = tokenizer.encode(c, add_special_tokens=False)
+        if len(ids) == 1:
+            return ids[0]
+        # keep a fallback: shortest tokenization
+        if best is None or len(ids) < len(best[1]):
+            best = (c, ids)
+
+    # If we get here, none were single-token. We'll fall back to first-token scoring,
+    # but note: this is an approximation for multi-token labels.
+    return best[1][0]
+def classify_stance_with_topic(sentence, topic, model, tokenizer, language):
     """Classify stance for a single sentence with topic context."""
     # Prepare labels for Hebrew stance classification
-    labels = ['בעד', 'נגד', 'נייטרלי']  # favor, against, neutral
-    
-    # Combine sentence with topic
-    combined_input = f"{sentence} [SEP] {topic}"
-    
-    inputs = tokenizer(combined_input, return_tensors='pt', truncation=True, padding=True)
-    
-    with torch.no_grad():
-        outputs = model(**inputs)
-    
-    logits = outputs.logits
-    probabilities = F.softmax(logits, dim=1).squeeze().tolist()
-    predicted_class = torch.argmax(logits, dim=1).item()
-    
+    if language == 'hebrew':
+        labels = ['בעד', 'נגד', 'נייטרלי']  # favor, against, neutral
+
+        # Combine sentence with topic
+        combined_input = f"{sentence} [SEP] {topic}"
+        
+        inputs = tokenizer(combined_input, return_tensors='pt', truncation=True, padding=True)
+        
+        with torch.no_grad():
+            outputs = model(**inputs)
+        
+        logits = outputs.logits
+        probabilities = F.softmax(logits, dim=1).squeeze().tolist()
+        predicted_class = torch.argmax(logits, dim=1).item()  
+
+    else: # English
+        labels = ['Favor', 'Against', 'Neutral']
+
+        combined = f"TOPIC: {topic}\nTEXT: {sentence}"
+        inputs = tokenizer(combined, return_tensors="pt", truncation=True, padding=True).to(model.device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        logits = outputs.logits  # (1, num_labels)
+        probs = torch.softmax(logits, dim=-1).squeeze(0)
+        probabilities = probs.detach().cpu().tolist()
+        predicted_class = int(torch.argmax(probs).item())
+
+        # Optional: reorder using config labels if needed
+        if getattr(model.config, "id2label", None):
+            id2label = model.config.id2label
+            # make index->label robust
+            if isinstance(next(iter(id2label.keys())), str):
+                id2label = {int(k): v for k, v in id2label.items()}
+            order = [id2label[i].strip().upper() for i in range(len(id2label))]
+            wanted = ["FAVOR", "AGAINST", "NEUTRAL"]
+            if all(w in order for w in wanted):
+                idx_map = [order.index(w) for w in wanted]
+                probs = probs[idx_map]
+                probabilities = probs.detach().cpu().tolist()
+                predicted_class = int(torch.argmax(probs).item())
+
     return labels[predicted_class], probabilities[predicted_class], probabilities
 
 
-def compute_stance_preservation_with_topic(dataset, model, tokenizer):
+
+def compute_stance_preservation_with_topic(dataset, model, tokenizer, language):
     """Compute stance preservation between article and summary sentences."""
     results = []
     Topic_Mismatch_Penalty = 3.0
@@ -610,11 +661,11 @@ def compute_stance_preservation_with_topic(dataset, model, tokenizer):
             
             # Classify stance for both sentences
             summary_stance, summary_score, summary_probs = classify_stance_with_topic(
-                summary_sentence, summary_topic, model, tokenizer
+                summary_sentence, summary_topic, model, tokenizer, language
             )
             
             article_stance, article_score, article_probs = classify_stance_with_topic(
-                article_sentence, article_topic, model, tokenizer
+                article_sentence, article_topic, model, tokenizer, language
             )
             
             # Create distance matrix for EMD calculation
@@ -644,7 +695,7 @@ def compute_stance_preservation_with_topic(dataset, model, tokenizer):
             art_entropy = Categorical(probs=article_tensor).entropy()
             
             # Skip if entropy is too high (uncertain predictions)
-            if sum_entropy > ln(num_classes) / 2 or art_entropy > ln(num_classes) / 2:
+            if sum_entropy > ln(num_classes) / 1.2 or art_entropy > ln(num_classes) / 1.2:
                 continue
             
             # Calculate EMD (Earth Mover's Distance)
@@ -733,7 +784,7 @@ def load_topic_model(model_name):
 
     
     else:
-        # model_name = "google/gemma-2-9b"
+        # model_name = "google/gemma-2-9b-it"
         topic_tokenizer = AutoTokenizer.from_pretrained(model_name)
         topic_model = AutoModelForCausalLM.from_pretrained(
             model_name,
