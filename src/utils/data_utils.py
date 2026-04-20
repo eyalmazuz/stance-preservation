@@ -1,3 +1,5 @@
+import re
+
 from dataclasses import dataclass, field
 
 import polars as pl

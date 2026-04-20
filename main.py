@@ -74,7 +74,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--stance-model",
         type=str,
-        default="./models/stance_detection_model_combined/",
+        default="./models/stance_detection",
         help="Which sentence matching model to use when using text NLI baseline.",
     )
     parser.add_argument(
