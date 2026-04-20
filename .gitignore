@@ -163,10 +163,7 @@ cython_debug/
 
 data/
 wandb/
+models/
+figures/
 .vscode/
-fine_tuned_dictabert_2/checkpoint-27/optimizer.pt
-fine_tuned_dictabert/model.safetensors
-fine_tuned_dictabert_2/checkpoint-27/model.safetensors
-fine_tuned_dictabert_2/model.safetensors
-
-
+.codex
