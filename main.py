@@ -90,6 +90,12 @@ def parse_args() -> argparse.Namespace:
         help="Whether to filter pairs based on if the topic match",
     )
     parser.add_argument(
+        "--use-soft-topic-filtering",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Whether to filter pairs based on if the topic match",
+    )
+    parser.add_argument(
         "--use-soft-topic",
         action=argparse.BooleanOptionalAction,
         default=False,
@@ -127,6 +133,7 @@ def main():
             args.language,
             args.entropy_threshold,
             args.use_topic_filtering,
+            args.use_soft_topic_filtering,
             args.use_soft_topic,
         )
     else:

@@ -10,6 +10,7 @@ from transformers import AutoModelForCausalLM, AutoModelForSequenceClassificatio
 
 from src.utils.data_utils import split_into_sentences
 from src.utils.prompt_utils import get_emd_prompt
+from src.utils.text_utils import topics_match_soft
 
 
 class EMDScorer:
@@ -24,6 +25,7 @@ class EMDScorer:
         language: str = "he",
         entropy_threshold: float = 0.0,
         use_topic_filtering: bool = False,
+        use_soft_topic_filtering: bool = False,
         use_soft_topic: bool = False,
     ) -> None:
         self.matching_model = self.get_matching_model(matching_model_name)
@@ -34,6 +36,7 @@ class EMDScorer:
         self.entropy_threshold = entropy_threshold if entropy_threshold != 0.0 else float("inf")
         self.canonical_labels = ["Against", "Neutral", "Favor"]
         self.use_topic_filtering = use_topic_filtering
+        self.use_soft_topic_filtering = use_soft_topic_filtering
         self.use_soft_topic = use_soft_topic
         self.stance_value = {"Against": -1, "Neutral": 0, "Favor": 1}
         self.C = np.array(
@@ -68,6 +71,7 @@ class EMDScorer:
 
             if (
                 ((hyp_topic != ref_topic) and self.use_topic_filtering)
+                or (not topics_match_soft(hyp_topic, ref_topic) and self.use_soft_topic_filtering)
                 or (Categorical(hyp_stance_probs).entropy() > self.entropy_threshold)
                 or (Categorical(ref_stance_probs).entropy() > self.entropy_threshold)
             ):
