@@ -85,7 +85,7 @@ class EMDScorer:
             # print(f"{emd_score=}")
 
         if kept == 0:
-            return float("inf")
+            return 2.0
         return emd_score / kept
 
     def get_matching_model(self, model_name: str):
@@ -105,7 +105,7 @@ class EMDScorer:
             device_map="cuda",
             quantization_config=quant_config,
         )
-        tokenizer = AutoTokenizer.from_pretrained("dicta-il/dictalm2.0")
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
 
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -122,11 +122,11 @@ class EMDScorer:
         return f"Instruct: {task_description}\nQuery: {query}"
 
     def get_matching_pairs(self, hyp_sentences: list[str], ref_sentences: list[str]) -> list[tuple[str, str]]:
-        hyp_sentences: list[str] = [
+        hyp_sentences_instruct: list[str] = [
             EMDScorer.get_detailed_instruct(EMDScorer.TASK, sentence)
             for sentence in hyp_sentences
         ]
-        hyp_embeddings = self.matching_model.encode(hyp_sentences, convert_to_tensor=True, normalize_embeddings=True)
+        hyp_embeddings = self.matching_model.encode(hyp_sentences_instruct, convert_to_tensor=True, normalize_embeddings=True)
         ref_embeddings = self.matching_model.encode(ref_sentences, convert_to_tensor=True, normalize_embeddings=True)
 
         scores = hyp_embeddings @ ref_embeddings.T
