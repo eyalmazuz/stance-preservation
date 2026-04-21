@@ -51,13 +51,14 @@ class EMDScorer:
             ref_sentences: list[str] = split_into_sentences(references)
             matched_pairs = self.get_matching_pairs(hyp_sentences, ref_sentences)
             full_hyp = hypotheses
-            full_ref = hypotheses
+            full_ref = references
         elif isinstance(hypotheses, list) and isinstance(references, list):
             matched_pairs = list(zip([hyp["text"] for hyp in hypotheses], [ref["text"] for ref in references]))
             full_hyp = hypotheses[0]["full_text"]
-            full_ref = hypotheses[0]["full_text"]
+            full_ref = references[0]["full_text"]
 
         # print(f"{len(matched_pairs)=}")
+        kept = 0
         for hyp_sentence, ref_sentence in tqdm(matched_pairs, leave=False):
             hyp_topic = self.get_topic(full_hyp, hyp_sentence)
             # print(f"{hyp_topic=}")
@@ -83,9 +84,10 @@ class EMDScorer:
                 hyp_stance_probs.numpy().astype(np.float64),
                 np.array(self.C).astype(np.float64),
             )
+            kept += 1
             # print(f"{emd_score=}")
 
-        return emd_score / len(matched_pairs)
+        return emd_score / kept
 
     def get_matching_model(self, model_name: str):
         model = SentenceTransformer(model_name)
