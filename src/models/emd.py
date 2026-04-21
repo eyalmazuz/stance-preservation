@@ -70,9 +70,9 @@ class EMDScorer:
             # print(f"{Categorical(ref_stance_probs).entropy()=}")
 
             if (
-                (hyp_topic != ref_topic) or
-                (Categorical(hyp_stance_probs).entropy() > self.entropy_threshold) or
-                (Categorical(ref_stance_probs).entropy() > self.entropy_threshold)
+                (hyp_topic != ref_topic)
+                or (Categorical(hyp_stance_probs).entropy() > self.entropy_threshold)
+                or (Categorical(ref_stance_probs).entropy() > self.entropy_threshold)
             ):
                 continue
 
@@ -123,10 +123,11 @@ class EMDScorer:
 
     def get_matching_pairs(self, hyp_sentences: list[str], ref_sentences: list[str]) -> list[tuple[str, str]]:
         hyp_sentences_instruct: list[str] = [
-            EMDScorer.get_detailed_instruct(EMDScorer.TASK, sentence)
-            for sentence in hyp_sentences
+            EMDScorer.get_detailed_instruct(EMDScorer.TASK, sentence) for sentence in hyp_sentences
         ]
-        hyp_embeddings = self.matching_model.encode(hyp_sentences_instruct, convert_to_tensor=True, normalize_embeddings=True)
+        hyp_embeddings = self.matching_model.encode(
+            hyp_sentences_instruct, convert_to_tensor=True, normalize_embeddings=True
+        )
         ref_embeddings = self.matching_model.encode(ref_sentences, convert_to_tensor=True, normalize_embeddings=True)
 
         scores = hyp_embeddings @ ref_embeddings.T
@@ -147,7 +148,7 @@ class EMDScorer:
                 attention_mask=inputs.attention_mask,
                 do_sample=False,
                 max_new_tokens=10,
-                pad_token_id=self.topic_tokenizer.eos_token_id
+                pad_token_id=self.topic_tokenizer.eos_token_id,
             )
 
         topic_tokens = outputs[0][prompt_length:]

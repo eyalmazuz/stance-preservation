@@ -116,7 +116,7 @@ class StanceAnnotator(QMainWindow):
         btn_layout.addWidget(self.btn_skip, 1)
         main_layout.addLayout(btn_layout)
 
-    def keyPressEvent(self, event: QKeyEvent):
+    def key_press_event(self, event: QKeyEvent):
         if event.key() == Qt.Key.Key_1:
             self.rb_neutral.setChecked(True)
         elif event.key() == Qt.Key.Key_2:
@@ -225,7 +225,8 @@ class StanceAnnotator(QMainWindow):
     def display_current(self):
         title = "משפט מהסיכום" if self.current_side == "summary" else "משפט מהמאמר"
         self.text_display.setHtml(
-            f"<div style='background-color:white; padding:10px;'><h2>{title}:</h2><p style='font-size:22px; color:#333;'>{self.current_text}</p></div>"
+            f"<div style='background-color:white; padding:10px;'><h2>{title}:</h2>"
+            "<p style='font-size:22px; color:#333;'>{self.current_text}</p></div>"
         )
         self.input_topic.clear()
         self.radio_group.setExclusive(False)

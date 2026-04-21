@@ -79,17 +79,10 @@ def get_hebrew_prompt_template() -> str:
         3. החזר את הנושא.
         """
 
-    examples_prompt = "\n".join(
-        [f"משפט: {ex['משפט']}\nנושא: {ex['נושא']}" for ex in dynamic_examples]
-    )
+    examples_prompt = "\n".join([f"משפט: {ex['משפט']}\nנושא: {ex['נושא']}" for ex in dynamic_examples])
 
     final_prompt = (
-        base_prompt
-        + "\n\nקונטקסט:"
-        + "{context}"
-        + "\n\nדוגמאות:\n"
-        + examples_prompt
-        + "\n\nמשפט: {sentence}\nנושא:"
+        base_prompt + "\n\nקונטקסט:" + "{context}" + "\n\nדוגמאות:\n" + examples_prompt + "\n\nמשפט: {sentence}\nנושא:"
     ).strip()
 
     return final_prompt
@@ -129,8 +122,7 @@ def get_hebrew_prompt_template_original_examples() -> str:
         # },
         {
             "משפט": (
-                "משרד החינוך ירחיב את תוכנית הגינות הלימודיות כך שכל תלמידי "
-                "כיתה ד' יגדלו ירקות כחלק משיעורי המדעים."
+                "משרד החינוך ירחיב את תוכנית הגינות הלימודיות כך שכל תלמידי כיתה ד' יגדלו ירקות כחלק משיעורי המדעים."
             ),
             "נושא": "גינות לימודיות",
         },
@@ -152,8 +144,7 @@ def get_hebrew_prompt_template_original_examples() -> str:
         },
         {
             "משפט": (
-                "מיזם חדש בבאר שבע מחבר בין סטודנטים לקשישים לצורך ביקורי בית "
-                "שבועיים והדרכה בשימוש בשירותים דיגיטליים."
+                "מיזם חדש בבאר שבע מחבר בין סטודנטים לקשישים לצורך ביקורי בית שבועיים והדרכה בשימוש בשירותים דיגיטליים."
             ),
             "נושא": "סיוע דיגיטלי",
         },
@@ -180,17 +171,10 @@ def get_hebrew_prompt_template_original_examples() -> str:
         3. החזר את הנושא.
         """
 
-    examples_prompt = "\n".join(
-        [f"משפט: {ex['משפט']}\nנושא: {ex['נושא']}" for ex in dynamic_examples]
-    )
+    examples_prompt = "\n".join([f"משפט: {ex['משפט']}\nנושא: {ex['נושא']}" for ex in dynamic_examples])
 
     final_prompt = (
-        base_prompt
-        + "\n\nקונטקסט:"
-        + "{context}"
-        + "\n\nדוגמאות:\n"
-        + examples_prompt
-        + "\n\nמשפט: {sentence}\nנושא:"
+        base_prompt + "\n\nקונטקסט:" + "{context}" + "\n\nדוגמאות:\n" + examples_prompt + "\n\nמשפט: {sentence}\nנושא:"
     ).strip()
 
     return final_prompt
