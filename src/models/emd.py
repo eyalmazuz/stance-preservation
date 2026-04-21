@@ -23,6 +23,8 @@ class EMDScorer:
         aggregate: str,
         language: str = "he",
         entropy_threshold: float = 0.0,
+        use_topic_filtering: bool = False,
+        use_soft_topic: bool = False,
     ) -> None:
         self.matching_model = self.get_matching_model(matching_model_name)
         self.topic_model, self.topic_tokenizer = self.get_topic_model(topic_model_name)
@@ -31,6 +33,8 @@ class EMDScorer:
         self.language = language
         self.entropy_threshold = entropy_threshold if entropy_threshold != 0.0 else float("inf")
         self.canonical_labels = ["Against", "Neutral", "Favor"]
+        self.use_topic_filtering = use_topic_filtering
+        self.use_soft_topic = use_soft_topic
         self.stance_value = {"Against": -1, "Neutral": 0, "Favor": 1}
         self.C = np.array(
             [
@@ -54,35 +58,32 @@ class EMDScorer:
             full_hyp = hypotheses[0]["full_text"]
             full_ref = references[0]["full_text"]
 
-        # print(f"{len(matched_pairs)=}")
         kept = 0
         for hyp_sentence, ref_sentence in tqdm(matched_pairs, leave=False):
             hyp_topic = self.get_topic(full_hyp, hyp_sentence)
-            # print(f"{hyp_topic=}")
             ref_topic = self.get_topic(full_ref, ref_sentence)
-            # print(f"{ref_topic=}")
 
             hyp_stance_probs = self.get_stance(hyp_sentence, hyp_topic)
-            # print(f"{hyp_stance_probs=}")
-            # print(f"{Categorical(hyp_stance_probs).entropy()=}")
             ref_stance_probs = self.get_stance(ref_sentence, ref_topic)
-            # print(f"{ref_stance_probs=}")
-            # print(f"{Categorical(ref_stance_probs).entropy()=}")
 
             if (
-                (hyp_topic != ref_topic)
-                or (Categorical(hyp_stance_probs).entropy() > self.entropy_threshold)
-                or (Categorical(ref_stance_probs).entropy() > self.entropy_threshold)
+                ((hyp_topic != ref_topic) and self.use_topic_filtering) or
+                (Categorical(hyp_stance_probs).entropy() > self.entropy_threshold) or
+                (Categorical(ref_stance_probs).entropy() > self.entropy_threshold)
             ):
                 continue
 
-            emd_score += ot.emd2(
+            stance_emd = ot.emd2(
                 ref_stance_probs.numpy().astype(np.float64),
                 hyp_stance_probs.numpy().astype(np.float64),
                 np.array(self.C).astype(np.float64),
             )
+            if self.use_soft_topic:
+                topic_similarity = (self.encode_text([hyp_topic]) @ self.encode_text([ref_topic]).T).squeeze().cpu().item()
+                emd_score += (stance_emd + 0.5 * (1 - topic_similarity))
+            else:
+                emd_score += stance_emd
             kept += 1
-            # print(f"{emd_score=}")
 
         if kept == 0:
             return 2.0
@@ -125,16 +126,24 @@ class EMDScorer:
         hyp_sentences_instruct: list[str] = [
             EMDScorer.get_detailed_instruct(EMDScorer.TASK, sentence) for sentence in hyp_sentences
         ]
+<<<<<<< HEAD
         hyp_embeddings = self.matching_model.encode(
             hyp_sentences_instruct, convert_to_tensor=True, normalize_embeddings=True
         )
         ref_embeddings = self.matching_model.encode(ref_sentences, convert_to_tensor=True, normalize_embeddings=True)
+=======
+        hyp_embeddings = self.encode_text(hyp_sentences_instruct)
+        ref_embeddings = self.encode_text(ref_sentences)
+>>>>>>> b705c90 (Added topic filtering and soft topic weight as options)
 
         scores = hyp_embeddings @ ref_embeddings.T
         best_cols = scores.argmax(axis=1)
         matched_pairs = [(hyp_sentences[i], ref_sentences[j]) for i, j in enumerate(best_cols)]
 
         return matched_pairs
+
+    def encode_text(self, texts: list[str]):
+        return self.matching_model.encode(texts, convert_to_tensor=True, normalize_embeddings=True)
 
     def get_topic(self, full_text: str, sentence: str) -> str:
         prompt = get_emd_prompt(self.language).format(context=full_text, sentence=sentence)

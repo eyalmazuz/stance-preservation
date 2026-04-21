@@ -83,6 +83,18 @@ def parse_args() -> argparse.Namespace:
         default=0.0,
         help="Whether to filter pairs based on stance model entropy",
     )
+    parser.add_argument(
+        "--use-topic-filtering",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Whether to filter pairs based on if the topic match",
+    )
+    parser.add_argument(
+        "--use-soft-topic",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Whether to add topic distance score to the final scoring",
+    )
     return parser.parse_args()
 
 
@@ -114,6 +126,8 @@ def main():
             args.aggregate_level,
             args.language,
             args.entropy_threshold,
+            args.use_topic_filtering,
+            args.use_soft_topic,
         )
     else:
         raise ValueError("Not implemented yet")
