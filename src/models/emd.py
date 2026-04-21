@@ -29,7 +29,7 @@ class EMDScorer:
         self.stance_model, self.stance_tokenizer = self.get_stance_model(stance_model_name)
         self.aggregate = aggregate
         self.language = language
-        self.entropy_threshold = entropy_threshold
+        self.entropy_threshold = entropy_threshold if entropy_threshold != 0.0 else float("inf")
         self.canonical_labels = ["Against", "Neutral", "Favor"]
         self.stance_value = {"Against": -1, "Neutral": 0, "Favor": 1}
         self.C = np.array(
@@ -49,29 +49,43 @@ class EMDScorer:
                 for sentence in split_into_sentences(hypotheses)
             ]
             ref_sentences: list[str] = split_into_sentences(references)
-
             matched_pairs = self.get_matching_pairs(hyp_sentences, ref_sentences)
+            full_hyp = hypotheses
+            full_ref = hypotheses
+        elif isinstance(hypotheses, list) and isinstance(references, list):
+            matched_pairs = list(zip([hyp["text"] for hyp in hypotheses], [ref["text"] for ref in references]))
+            full_hyp = hypotheses[0]["full_text"]
+            full_ref = hypotheses[0]["full_text"]
 
-            for hyp_sentence, ref_sentence in tqdm(matched_pairs, leave=False):
-                hyp_topic = self.get_topic(hypotheses, hyp_sentence)
-                ref_topic = self.get_topic(references, ref_sentence)
+        # print(f"{len(matched_pairs)=}")
+        for hyp_sentence, ref_sentence in tqdm(matched_pairs, leave=False):
+            hyp_topic = self.get_topic(full_hyp, hyp_sentence)
+            # print(f"{hyp_topic=}")
+            ref_topic = self.get_topic(full_ref, ref_sentence)
+            # print(f"{ref_topic=}")
 
-                hyp_stance_probs = self.get_stance(hyp_sentence, hyp_topic)
-                ref_stance_probs = self.get_stance(ref_sentence, ref_topic)
+            hyp_stance_probs = self.get_stance(hyp_sentence, hyp_topic)
+            # print(f"{hyp_stance_probs=}")
+            # print(f"{Categorical(hyp_stance_probs).entropy()=}")
+            ref_stance_probs = self.get_stance(ref_sentence, ref_topic)
+            # print(f"{ref_stance_probs=}")
+            # print(f"{Categorical(ref_stance_probs).entropy()=}")
 
-                if (
-                    Categorical(hyp_stance_probs).entropy() > self.entropy_threshold
-                    or Categorical(ref_stance_probs).entropy() > self.entropy_threshold
-                ):
-                    continue
+            if (
+                (hyp_topic != ref_topic) or
+                (Categorical(hyp_stance_probs).entropy() > self.entropy_threshold) or
+                (Categorical(ref_stance_probs).entropy() > self.entropy_threshold)
+            ):
+                continue
 
-                emd_score += ot.emd2(
-                    ref_stance_probs.numpy().astype(np.float64),
-                    hyp_stance_probs.numpy().astype(np.float64),
-                    np.array(self.C).astype(np.float64),
-                )
+            emd_score += ot.emd2(
+                ref_stance_probs.numpy().astype(np.float64),
+                hyp_stance_probs.numpy().astype(np.float64),
+                np.array(self.C).astype(np.float64),
+            )
+            # print(f"{emd_score=}")
 
-        return emd_score / len(hypotheses)
+        return emd_score / len(matched_pairs)
 
     def get_matching_model(self, model_name: str):
         model = SentenceTransformer(model_name)
@@ -128,6 +142,7 @@ class EMDScorer:
                 attention_mask=inputs.attention_mask,
                 do_sample=False,
                 max_new_tokens=10,
+                pad_token_id=self.topic_tokenizer.eos_token_id
             )
 
         topic_tokens = outputs[0][prompt_length:]
