@@ -75,7 +75,7 @@ def parse_args() -> argparse.Namespace:
         "--stance-model",
         type=str,
         default="./models/stance_detection",
-        help="Which sentence matching model to use when using text NLI baseline.",
+        help="Which stance model to use when using text NLI baseline.",
     )
     parser.add_argument(
         "--entropy-threshold",
