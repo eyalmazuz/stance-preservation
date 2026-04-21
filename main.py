@@ -68,7 +68,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--topic-model",
         type=str,
-        default="intfloat/multilingual-e5-large-instruct",
+        default="dicta-il/dictalm2.0",
         help="Which sentence matching model to use when using text NLI baseline.",
     )
     parser.add_argument(
