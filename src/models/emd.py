@@ -44,10 +44,7 @@ class EMDScorer:
         emd_score: float = 0.0
 
         if isinstance(hypotheses, str) and isinstance(references, str):
-            hyp_sentences: list[str] = [
-                EMDScorer.get_detailed_instruct(EMDScorer.TASK, sentence)
-                for sentence in split_into_sentences(hypotheses)
-            ]
+            hyp_sentences: list[str] = split_into_sentences(hypotheses)
             ref_sentences: list[str] = split_into_sentences(references)
             matched_pairs = self.get_matching_pairs(hyp_sentences, ref_sentences)
             full_hyp = hypotheses
@@ -87,6 +84,8 @@ class EMDScorer:
             kept += 1
             # print(f"{emd_score=}")
 
+        if kept == 0:
+            return float("inf")
         return emd_score / kept
 
     def get_matching_model(self, model_name: str):
@@ -102,7 +101,7 @@ class EMDScorer:
         )
 
         model = AutoModelForCausalLM.from_pretrained(
-            "dicta-il/dictalm2.0",
+            model_name,
             device_map="cuda",
             quantization_config=quant_config,
         )
@@ -123,6 +122,10 @@ class EMDScorer:
         return f"Instruct: {task_description}\nQuery: {query}"
 
     def get_matching_pairs(self, hyp_sentences: list[str], ref_sentences: list[str]) -> list[tuple[str, str]]:
+        hyp_sentences: list[str] = [
+            EMDScorer.get_detailed_instruct(EMDScorer.TASK, sentence)
+            for sentence in hyp_sentences
+        ]
         hyp_embeddings = self.matching_model.encode(hyp_sentences, convert_to_tensor=True, normalize_embeddings=True)
         ref_embeddings = self.matching_model.encode(ref_sentences, convert_to_tensor=True, normalize_embeddings=True)
 
