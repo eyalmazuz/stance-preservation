@@ -67,9 +67,9 @@ class EMDScorer:
             ref_stance_probs = self.get_stance(ref_sentence, ref_topic)
 
             if (
-                ((hyp_topic != ref_topic) and self.use_topic_filtering) or
-                (Categorical(hyp_stance_probs).entropy() > self.entropy_threshold) or
-                (Categorical(ref_stance_probs).entropy() > self.entropy_threshold)
+                ((hyp_topic != ref_topic) and self.use_topic_filtering)
+                or (Categorical(hyp_stance_probs).entropy() > self.entropy_threshold)
+                or (Categorical(ref_stance_probs).entropy() > self.entropy_threshold)
             ):
                 continue
 
@@ -79,8 +79,10 @@ class EMDScorer:
                 np.array(self.C).astype(np.float64),
             )
             if self.use_soft_topic:
-                topic_similarity = (self.encode_text([hyp_topic]) @ self.encode_text([ref_topic]).T).squeeze().cpu().item()
-                emd_score += (stance_emd + 0.5 * (1 - topic_similarity))
+                topic_similarity = (
+                    (self.encode_text([hyp_topic]) @ self.encode_text([ref_topic]).T).squeeze().cpu().item()
+                )
+                emd_score += stance_emd + 0.5 * (1 - topic_similarity)
             else:
                 emd_score += stance_emd
             kept += 1
