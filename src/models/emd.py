@@ -126,15 +126,8 @@ class EMDScorer:
         hyp_sentences_instruct: list[str] = [
             EMDScorer.get_detailed_instruct(EMDScorer.TASK, sentence) for sentence in hyp_sentences
         ]
-<<<<<<< HEAD
-        hyp_embeddings = self.matching_model.encode(
-            hyp_sentences_instruct, convert_to_tensor=True, normalize_embeddings=True
-        )
-        ref_embeddings = self.matching_model.encode(ref_sentences, convert_to_tensor=True, normalize_embeddings=True)
-=======
         hyp_embeddings = self.encode_text(hyp_sentences_instruct)
         ref_embeddings = self.encode_text(ref_sentences)
->>>>>>> b705c90 (Added topic filtering and soft topic weight as options)
 
         scores = hyp_embeddings @ ref_embeddings.T
         best_cols = scores.argmax(axis=1)
