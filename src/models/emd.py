@@ -9,7 +9,7 @@ from tqdm.auto import tqdm
 from transformers import AutoModelForCausalLM, AutoModelForSequenceClassification, AutoTokenizer, BitsAndBytesConfig
 
 from src.utils.data_utils import split_into_sentences
-from src.utils.prompt_utils import get_prompt
+from src.utils.prompt_utils import get_emd_prompt
 
 
 class EMDScorer:
@@ -131,7 +131,7 @@ class EMDScorer:
         return matched_pairs
 
     def get_topic(self, full_text: str, sentence: str) -> str:
-        prompt = get_prompt(self.language).format(context=full_text, sentence=sentence)
+        prompt = get_emd_prompt(self.language).format(context=full_text, sentence=sentence)
 
         inputs = self.topic_tokenizer(prompt.strip(), return_tensors="pt", padding=True).to(self.topic_model.device)
         prompt_length = inputs.input_ids.shape[1]
