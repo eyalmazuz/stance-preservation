@@ -26,7 +26,7 @@ class EMDScorer:
         entropy_threshold: float = 0.0,
         use_topic_filtering: bool = False,
         use_soft_topic_filtering: bool = False,
-        use_soft_topic: bool = False,
+        use_dist_topic_score: bool = False,
     ) -> None:
         self.matching_model = self.get_matching_model(matching_model_name)
         self.topic_model, self.topic_tokenizer = self.get_topic_model(topic_model_name)
@@ -37,7 +37,7 @@ class EMDScorer:
         self.canonical_labels = ["Against", "Neutral", "Favor"]
         self.use_topic_filtering = use_topic_filtering
         self.use_soft_topic_filtering = use_soft_topic_filtering
-        self.use_soft_topic = use_soft_topic
+        self.use_dist_topic_score = use_dist_topic_score
         self.stance_value = {"Against": -1, "Neutral": 0, "Favor": 1}
         self.C = np.array(
             [
@@ -82,7 +82,7 @@ class EMDScorer:
                 hyp_stance_probs.numpy().astype(np.float64),
                 np.array(self.C).astype(np.float64),
             )
-            if self.use_soft_topic:
+            if self.use_dist_topic_score:
                 topic_similarity = (
                     (self.encode_text([hyp_topic]) @ self.encode_text([ref_topic]).T).squeeze().cpu().item()
                 )

@@ -93,10 +93,10 @@ def parse_args() -> argparse.Namespace:
         "--use-soft-topic-filtering",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="Whether to filter pairs based on if the topic match",
+        help="Whether to filter pairs based on if the topic similarly match",
     )
     parser.add_argument(
-        "--use-soft-topic",
+        "--use-dist-topic-score",
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Whether to add topic distance score to the final scoring",
@@ -134,7 +134,7 @@ def main():
             args.entropy_threshold,
             args.use_topic_filtering,
             args.use_soft_topic_filtering,
-            args.use_soft_topic,
+            args.use_dist_topic_score,
         )
     else:
         raise ValueError("Not implemented yet")
