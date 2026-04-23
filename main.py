@@ -89,6 +89,12 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help="Whether to filter pairs based on if the topic match.",
     )
+    parser.add_argument(
+        "--debug",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Whether to print debug statistics during scoring.",
+    )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--use-soft-topic-filtering",
@@ -143,6 +149,7 @@ def main():
             args.use_soft_topic_filtering,
             args.use_dist_topic_score,
             args.use_weighted_emd,
+            args.debug,
         )
     else:
         raise ValueError("Not implemented yet")

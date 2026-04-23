@@ -28,6 +28,7 @@ class EMDScorer:
         use_soft_topic_filtering: bool = False,
         use_dist_topic_score: bool = False,
         use_weighted_emd: bool = False,
+        debug: bool = False,
     ) -> None:
         self.matching_model = self.get_matching_model(matching_model_name)
         self.matching_model_name = matching_model_name
@@ -41,6 +42,7 @@ class EMDScorer:
         self.use_soft_topic_filtering = use_soft_topic_filtering
         self.use_dist_topic_score = use_dist_topic_score
         self.use_weighted_emd = use_weighted_emd
+        self.debug = debug
         self.filter_stats: list[dict[str, float]] = []
         self.stance_value = {"Against": -1, "Neutral": 0, "Favor": 1}
         self.C = np.array(
@@ -116,7 +118,7 @@ class EMDScorer:
             kept += 1 if not self.use_weighted_emd else sim
             kept_pairs += 1
 
-        if self.use_topic_filtering or self.use_soft_topic_filtering:
+        if self.debug and (self.use_topic_filtering or self.use_soft_topic_filtering):
             keep_rate = kept_pairs / total_pairs if total_pairs else 0.0
             exact_topic_match_rate = exact_topic_matches / total_pairs if total_pairs else 0.0
             soft_topic_match_rate = soft_topic_matches / total_pairs if total_pairs else 0.0
@@ -143,7 +145,7 @@ class EMDScorer:
         return emd_score / kept
 
     def print_filter_summary(self) -> None:
-        if not (self.use_topic_filtering or self.use_soft_topic_filtering) or not self.filter_stats:
+        if not self.debug or not (self.use_topic_filtering or self.use_soft_topic_filtering) or not self.filter_stats:
             return
 
         kept_pairs = np.array([stat["kept_pairs"] for stat in self.filter_stats], dtype=np.float64)
