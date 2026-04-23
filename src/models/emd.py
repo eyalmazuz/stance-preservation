@@ -134,8 +134,7 @@ class EMDScorer:
         return f"Instruct: {task_description}\nQuery: {query}"
 
     def get_matching_pairs(
-        self, hyp_sentences: list[str], ref_sentences: list[str], return_sims: bool = False
-    ) -> list[tuple[str, str, float]]:
+        self, hyp_sentences: list[str], ref_sentences: list[str]) -> list[tuple[str, str, float]]:
 
         hyp_embeddings = self.encode_text(hyp_sentences, is_query=True)
         ref_embeddings = self.encode_text(ref_sentences, is_query=False)
@@ -157,7 +156,7 @@ class EMDScorer:
                 case "microsoft/harrier-oss-v1-0.6b":
                     return self.matching_model.encode(texts, prompt_name="sts_query", convert_to_tensor=True)
                 case _:
-                    raise ValueError(f"Invalid embedding model: {self.matching_model_name}")
+                    return self.matching_model.encode(texts, convert_to_tensor=True, normalize_embeddings=True)
 
         return self.matching_model.encode(texts, convert_to_tensor=True, normalize_embeddings=True)
 
