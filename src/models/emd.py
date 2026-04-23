@@ -30,6 +30,7 @@ class EMDScorer:
         use_weighted_emd: bool = False,
     ) -> None:
         self.matching_model = self.get_matching_model(matching_model_name)
+        self.matching_model_name = matching_model_name
         self.topic_model, self.topic_tokenizer = self.get_topic_model(topic_model_name)
         self.stance_model, self.stance_tokenizer = self.get_stance_model(stance_model_name)
         self.aggregate = aggregate
@@ -135,11 +136,9 @@ class EMDScorer:
     def get_matching_pairs(
         self, hyp_sentences: list[str], ref_sentences: list[str], return_sims: bool = False
     ) -> list[tuple[str, str, float]]:
-        hyp_sentences_instruct: list[str] = [
-            EMDScorer.get_detailed_instruct(EMDScorer.TASK, sentence) for sentence in hyp_sentences
-        ]
-        hyp_embeddings = self.encode_text(hyp_sentences_instruct)
-        ref_embeddings = self.encode_text(ref_sentences)
+
+        hyp_embeddings = self.encode_text(hyp_sentences, is_query=True)
+        ref_embeddings = self.encode_text(ref_sentences, is_query=False)
 
         scores = hyp_embeddings @ ref_embeddings.T
         best_sims, best_cols = scores.max(axis=1)
@@ -147,7 +146,19 @@ class EMDScorer:
 
         return matched_pairs
 
-    def encode_text(self, texts: list[str]):
+    def encode_text(self, texts: list[str], is_query: bool = False):
+        if is_query:
+            match self.matching_model_name:
+                case "intfloat/multilingual-e5-large-instruct":
+                    texts_instruct: list[str] = [
+                        EMDScorer.get_detailed_instruct(EMDScorer.TASK, sentence) for sentence in texts
+                    ]
+                    return self.matching_model.encode(texts_instruct, convert_to_tensor=True, normalize_embeddings=True)
+                case "microsoft/harrier-oss-v1-0.6b":
+                    return self.matching_model.encode(texts, prompt_name="sts_query", convert_to_tensor=True)
+                case _:
+                    raise ValueError(f"Invalid embedding model: {self.matching_model_name}")
+
         return self.matching_model.encode(texts, convert_to_tensor=True, normalize_embeddings=True)
 
     def get_topic(self, full_text: str, sentence: str) -> str:
