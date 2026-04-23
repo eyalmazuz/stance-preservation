@@ -119,7 +119,6 @@ class EMDScorer:
             kept_pairs += 1
 
         if self.debug and (self.use_topic_filtering or self.use_soft_topic_filtering):
-            keep_rate = kept_pairs / total_pairs if total_pairs else 0.0
             exact_topic_match_rate = exact_topic_matches / total_pairs if total_pairs else 0.0
             soft_topic_match_rate = soft_topic_matches / total_pairs if total_pairs else 0.0
             self.filter_stats.append(
@@ -131,13 +130,6 @@ class EMDScorer:
                     "exact_topic_match_rate": exact_topic_match_rate,
                     "soft_topic_match_rate": soft_topic_match_rate,
                 }
-            )
-            print(
-                "EMD filtering: "
-                f"kept {kept_pairs}/{total_pairs} pairs ({keep_rate:.1%}), "
-                f"exact_topic_match_rate={exact_topic_match_rate:.1%}, "
-                f"soft_topic_match_rate={soft_topic_match_rate:.1%}, "
-                f"topic_skips={skipped_topic}, entropy_skips={skipped_entropy}"
             )
 
         if kept == 0:
