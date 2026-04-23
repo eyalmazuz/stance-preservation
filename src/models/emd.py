@@ -41,6 +41,7 @@ class EMDScorer:
         self.use_soft_topic_filtering = use_soft_topic_filtering
         self.use_dist_topic_score = use_dist_topic_score
         self.use_weighted_emd = use_weighted_emd
+        self.filter_stats: list[dict[str, float]] = []
         self.stance_value = {"Against": -1, "Neutral": 0, "Favor": 1}
         self.C = np.array(
             [
@@ -64,7 +65,13 @@ class EMDScorer:
             full_hyp = hypotheses[0]["full_text"]
             full_ref = references[0]["full_text"]
 
-        kept = 0
+        total_pairs = len(matched_pairs)
+        kept = 0.0
+        kept_pairs = 0
+        exact_topic_matches = 0
+        soft_topic_matches = 0
+        skipped_topic = 0
+        skipped_entropy = 0
         for hyp_sentence, ref_sentence, sim in tqdm(matched_pairs, leave=False):
             hyp_topic = self.get_topic(full_hyp, hyp_sentence)
             ref_topic = self.get_topic(full_ref, ref_sentence)
@@ -72,12 +79,24 @@ class EMDScorer:
             hyp_stance_probs = self.get_stance(hyp_sentence, hyp_topic)
             ref_stance_probs = self.get_stance(ref_sentence, ref_topic)
 
-            if (
-                ((hyp_topic != ref_topic) and self.use_topic_filtering)
-                or (not topics_match_soft(hyp_topic, ref_topic) and self.use_soft_topic_filtering)
-                or (Categorical(hyp_stance_probs).entropy() > self.entropy_threshold)
-                or (Categorical(ref_stance_probs).entropy() > self.entropy_threshold)
-            ):
+            exact_topics_match = hyp_topic == ref_topic
+            soft_topics_match = topics_match_soft(hyp_topic, ref_topic)
+            exact_topic_matches += int(exact_topics_match)
+            soft_topic_matches += int(soft_topics_match)
+
+            topic_filtered = ((not exact_topics_match) and self.use_topic_filtering) or (
+                not soft_topics_match and self.use_soft_topic_filtering
+            )
+            entropy_filtered = (Categorical(hyp_stance_probs).entropy() > self.entropy_threshold) or (
+                Categorical(ref_stance_probs).entropy() > self.entropy_threshold
+            )
+
+            if topic_filtered:
+                skipped_topic += 1
+                continue
+
+            if entropy_filtered:
+                skipped_entropy += 1
                 continue
 
             stance_emd = ot.emd2(
@@ -95,10 +114,63 @@ class EMDScorer:
             else:
                 emd_score += stance_emd
             kept += 1 if not self.use_weighted_emd else sim
+            kept_pairs += 1
+
+        if self.use_topic_filtering or self.use_soft_topic_filtering:
+            keep_rate = kept_pairs / total_pairs if total_pairs else 0.0
+            exact_topic_match_rate = exact_topic_matches / total_pairs if total_pairs else 0.0
+            soft_topic_match_rate = soft_topic_matches / total_pairs if total_pairs else 0.0
+            self.filter_stats.append(
+                {
+                    "total_pairs": float(total_pairs),
+                    "kept_pairs": float(kept_pairs),
+                    "topic_skips": float(skipped_topic),
+                    "entropy_skips": float(skipped_entropy),
+                    "exact_topic_match_rate": exact_topic_match_rate,
+                    "soft_topic_match_rate": soft_topic_match_rate,
+                }
+            )
+            print(
+                "EMD filtering: "
+                f"kept {kept_pairs}/{total_pairs} pairs ({keep_rate:.1%}), "
+                f"exact_topic_match_rate={exact_topic_match_rate:.1%}, "
+                f"soft_topic_match_rate={soft_topic_match_rate:.1%}, "
+                f"topic_skips={skipped_topic}, entropy_skips={skipped_entropy}"
+            )
 
         if kept == 0:
             return 2.0
         return emd_score / kept
+
+    def print_filter_summary(self) -> None:
+        if not (self.use_topic_filtering or self.use_soft_topic_filtering) or not self.filter_stats:
+            return
+
+        kept_pairs = np.array([stat["kept_pairs"] for stat in self.filter_stats], dtype=np.float64)
+        total_pairs = np.array([stat["total_pairs"] for stat in self.filter_stats], dtype=np.float64)
+        exact_topic_match_rates = np.array(
+            [stat["exact_topic_match_rate"] for stat in self.filter_stats],
+            dtype=np.float64,
+        )
+        soft_topic_match_rates = np.array(
+            [stat["soft_topic_match_rate"] for stat in self.filter_stats],
+            dtype=np.float64,
+        )
+        zero_kept_docs = int((kept_pairs == 0).sum())
+        overall_keep_rate = kept_pairs.sum() / total_pairs.sum() if total_pairs.sum() else 0.0
+
+        print(
+            "EMD filtering summary: "
+            f"docs={len(self.filter_stats)}, "
+            f"mean_kept={kept_pairs.mean():.2f}, "
+            f"median_kept={np.median(kept_pairs):.2f}, "
+            f"min_kept={kept_pairs.min():.0f}, "
+            f"max_kept={kept_pairs.max():.0f}, "
+            f"zero_kept_docs={zero_kept_docs}, "
+            f"overall_keep_rate={overall_keep_rate:.1%}, "
+            f"mean_exact_topic_match_rate={exact_topic_match_rates.mean():.1%}, "
+            f"mean_soft_topic_match_rate={soft_topic_match_rates.mean():.1%}"
+        )
 
     def get_matching_model(self, model_name: str):
         model = SentenceTransformer(model_name)

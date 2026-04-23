@@ -167,6 +167,9 @@ def main():
         stat, pvalue = corr(preds, scores)
         print(f"{name}- corr: {stat:.3f}, p-value {pvalue:.3f}")
 
+    if hasattr(scorer, "print_filter_summary"):
+        scorer.print_filter_summary()
+
 
 if __name__ == "__main__":
     main()
