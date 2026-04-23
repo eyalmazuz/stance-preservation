@@ -24,7 +24,7 @@ def char_ngrams(s: str, n: int = 3) -> set[str]:
     s = norm_topic(s).replace(" ", "")
     if len(s) < n:
         return {s} if s else set()
-    return {s[i:i+n] for i in range(len(s) - n + 1)}
+    return {s[i : i + n] for i in range(len(s) - n + 1)}
 
 
 def char_jaccard(a: str, b: str, n: int = 3) -> float:
@@ -42,8 +42,4 @@ def fuzzy_ratio(a: str, b: str) -> float:
 
 
 def topics_match_soft(a: str, b: str) -> bool:
-    return (
-        token_jaccard(a, b) >= 0.5
-        or char_jaccard(a, b, n=3) >= 0.45
-        or fuzzy_ratio(a, b) >= 0.82
-    )
+    return token_jaccard(a, b) >= 0.5 or char_jaccard(a, b, n=3) >= 0.45 or fuzzy_ratio(a, b) >= 0.82

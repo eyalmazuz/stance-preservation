@@ -81,25 +81,32 @@ def parse_args() -> argparse.Namespace:
         "--entropy-threshold",
         type=float,
         default=0.0,
-        help="Whether to filter pairs based on stance model entropy",
+        help="Whether to filter pairs based on stance model entropy.",
     )
     parser.add_argument(
         "--use-topic-filtering",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="Whether to filter pairs based on if the topic match",
+        help="Whether to filter pairs based on if the topic match.",
     )
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
         "--use-soft-topic-filtering",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="Whether to filter pairs based on if the topic similarly match",
+        help="Whether to filter pairs based on if the topic similarly match.",
     )
-    parser.add_argument(
+    group.add_argument(
         "--use-dist-topic-score",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="Whether to add topic distance score to the final scoring",
+        help="Whether to add topic distance score to the final scoring.",
+    )
+    group.add_argument(
+        "--use-weighted-emd",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Whether to weight the EMD score by the cosine sim.",
     )
     return parser.parse_args()
 
@@ -135,6 +142,7 @@ def main():
             args.use_topic_filtering,
             args.use_soft_topic_filtering,
             args.use_dist_topic_score,
+            args.use_weighted_emd,
         )
     else:
         raise ValueError("Not implemented yet")

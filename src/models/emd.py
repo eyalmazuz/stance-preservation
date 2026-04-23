@@ -27,6 +27,7 @@ class EMDScorer:
         use_topic_filtering: bool = False,
         use_soft_topic_filtering: bool = False,
         use_dist_topic_score: bool = False,
+        use_weighted_emd: bool = False,
     ) -> None:
         self.matching_model = self.get_matching_model(matching_model_name)
         self.topic_model, self.topic_tokenizer = self.get_topic_model(topic_model_name)
@@ -38,6 +39,7 @@ class EMDScorer:
         self.use_topic_filtering = use_topic_filtering
         self.use_soft_topic_filtering = use_soft_topic_filtering
         self.use_dist_topic_score = use_dist_topic_score
+        self.use_weighted_emd = use_weighted_emd
         self.stance_value = {"Against": -1, "Neutral": 0, "Favor": 1}
         self.C = np.array(
             [
@@ -57,12 +59,12 @@ class EMDScorer:
             full_hyp = hypotheses
             full_ref = references
         elif isinstance(hypotheses, list) and isinstance(references, list):
-            matched_pairs = list(zip([hyp["text"] for hyp in hypotheses], [ref["text"] for ref in references]))
+            matched_pairs = [(hyp["text"], ref["text"], 1.0) for hyp, ref in zip(hypotheses, references, strict=True)]
             full_hyp = hypotheses[0]["full_text"]
             full_ref = references[0]["full_text"]
 
         kept = 0
-        for hyp_sentence, ref_sentence in tqdm(matched_pairs, leave=False):
+        for hyp_sentence, ref_sentence, sim in tqdm(matched_pairs, leave=False):
             hyp_topic = self.get_topic(full_hyp, hyp_sentence)
             ref_topic = self.get_topic(full_ref, ref_sentence)
 
@@ -87,9 +89,11 @@ class EMDScorer:
                     (self.encode_text([hyp_topic]) @ self.encode_text([ref_topic]).T).squeeze().cpu().item()
                 )
                 emd_score += stance_emd + 0.5 * (1 - topic_similarity)
+            elif self.use_weighted_emd:
+                emd_score += stance_emd * sim
             else:
                 emd_score += stance_emd
-            kept += 1
+            kept += 1 if not self.use_weighted_emd else sim
 
         if kept == 0:
             return 2.0
@@ -128,7 +132,9 @@ class EMDScorer:
     def get_detailed_instruct(task_description: str, query: str) -> str:
         return f"Instruct: {task_description}\nQuery: {query}"
 
-    def get_matching_pairs(self, hyp_sentences: list[str], ref_sentences: list[str]) -> list[tuple[str, str]]:
+    def get_matching_pairs(
+        self, hyp_sentences: list[str], ref_sentences: list[str], return_sims: bool = False
+    ) -> list[tuple[str, str, float]]:
         hyp_sentences_instruct: list[str] = [
             EMDScorer.get_detailed_instruct(EMDScorer.TASK, sentence) for sentence in hyp_sentences
         ]
@@ -136,8 +142,8 @@ class EMDScorer:
         ref_embeddings = self.encode_text(ref_sentences)
 
         scores = hyp_embeddings @ ref_embeddings.T
-        best_cols = scores.argmax(axis=1)
-        matched_pairs = [(hyp_sentences[i], ref_sentences[j]) for i, j in enumerate(best_cols)]
+        best_sims, best_cols = scores.max(axis=1)
+        matched_pairs = [(hyp_sentences[i], ref_sentences[j], best_sims[i].item()) for i, j in enumerate(best_cols)]
 
         return matched_pairs
 
