@@ -24,7 +24,7 @@ def parse_args() -> argparse.Namespace:
         "--no-save-preds",
         action="store_true",
         default=False,
-        help="Whether to save the predictions to the results file or not."
+        help="Whether to save the predictions to the results file or not.",
     )
     parser.add_argument(
         "--language", type=str, choices=["he", "en"], default="he", help="Which langauge the dataset is."
@@ -177,8 +177,6 @@ def main():
         pred = scorer.score(hypotheses, references)
         preds.append(pred)
 
-
-
     for name, corr in [("Pearson", pearsonr), ("Spearman", spearmanr), ("Kendall", kendalltau)]:
         stat, pvalue = corr(preds, scores)
         print(f"{name}- corr: {stat:.3f}, p-value {pvalue:.3f}")
@@ -197,17 +195,17 @@ def main():
             case _:
                 raise ValueError(f"Invalid aggregate type: {args.aggregate_level}")
         if not os.path.exists(f"./results/{file_}"):
-            df = pl.from_dict({
-                        "article": [pair.article for pair in data],
-                        "summary": [pair.summary for pair in data],
-                        "score": [pair.score for pair in data],
-                    })
+            df = pl.from_dict(
+                {
+                    "article": [pair.article for pair in data],
+                    "summary": [pair.summary for pair in data],
+                    "score": [pair.score for pair in data],
+                }
+            )
         else:
             df = pl.read_csv(f"./results/{file_}")
 
-        df = df.with_columns(
-                pl.Series(f"{args.model}_preds", preds)
-             )
+        df = df.with_columns(pl.Series(f"{args.model}_preds", preds))
         df.write_csv(f"./results/{file_}")
 
 

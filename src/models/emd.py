@@ -199,8 +199,7 @@ class EMDScorer:
     def get_detailed_instruct(task_description: str, query: str) -> str:
         return f"Instruct: {task_description}\nQuery: {query}"
 
-    def get_matching_pairs(
-        self, hyp_sentences: list[str], ref_sentences: list[str]) -> list[tuple[str, str, float]]:
+    def get_matching_pairs(self, hyp_sentences: list[str], ref_sentences: list[str]) -> list[tuple[str, str, float]]:
 
         hyp_embeddings = self.encode_text(hyp_sentences, is_query=True)
         ref_embeddings = self.encode_text(ref_sentences, is_query=False)
