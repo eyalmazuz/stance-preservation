@@ -1,4 +1,5 @@
 import argparse
+import os
 
 import polars as pl
 
@@ -18,6 +19,12 @@ def parse_args() -> argparse.Namespace:
         choices=["GPT", "Gemini", "annotator_A", "annotator_B", "majority"],
         default="majority",
         help="Which annotation to use as the ground truth.",
+    )
+    parser.add_argument(
+        "--no-save-preds",
+        action="store_true",
+        default=False,
+        help="Whether to save the predictions to the results file or not."
     )
     parser.add_argument(
         "--language", type=str, choices=["he", "en"], default="he", help="Which langauge the dataset is."
@@ -170,12 +177,38 @@ def main():
         pred = scorer.score(hypotheses, references)
         preds.append(pred)
 
+
+
     for name, corr in [("Pearson", pearsonr), ("Spearman", spearmanr), ("Kendall", kendalltau)]:
         stat, pvalue = corr(preds, scores)
         print(f"{name}- corr: {stat:.3f}, p-value {pvalue:.3f}")
 
-    if hasattr(scorer, "print_filter_summary"):
+    if hasattr(scorer, "print_filter_summary") and isinstance(scorer, EMDScorer):
         scorer.print_filter_summary()
+
+    if not args.no_save_preds:
+        if not os.path.exists("./results"):
+            os.makedirs("./results", exist_ok=True)
+        match args.aggregate_level:
+            case "article":
+                file_ = f"{args.language}_scores_aricle.csv"
+            case "sentence":
+                file_ = f"{args.language}_scores_sentence.csv"
+            case _:
+                raise ValueError(f"Invalid aggregate type: {args.aggregate_level}")
+        if not os.path.exists(f"./results/{file_}"):
+            df = pl.from_dict({
+                        "article": [pair.article for pair in data],
+                        "summary": [pair.summary for pair in data],
+                        "score": [pair.score for pair in data],
+                    })
+        else:
+            df = pl.read_csv(f"./results/{file_}")
+
+        df = df.with_columns(
+                pl.Series(f"{args.model}_preds", preds)
+             )
+        df.write_csv(f"./results/{file_}")
 
 
 if __name__ == "__main__":
