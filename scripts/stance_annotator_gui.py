@@ -1,3 +1,4 @@
+import html
 import random
 import sys
 
@@ -149,11 +150,11 @@ class StanceAnnotator(QMainWindow):
                     self.df[col] = self.df[col].astype(object)
 
             # Initial Total Count
-            s_texts = self.df["Sentence in Summary"].dropna().unique().tolist()
+            s_texts = self.df["sentence_in_summary"].dropna().unique().tolist()
 
             def get_art_text(row):
-                m = row.get("Manual match")
-                return m if not self.is_empty(m) else row.get("Best Match Sentences From Article", "")
+                m = row.get("manual_match")
+                return m if not self.is_empty(m) else row.get("best_match_sentences_from_article", "")
 
             a_texts = self.df.apply(get_art_text, axis=1).unique().tolist()
             self.total_unique_tasks = len([t for t in s_texts if not self.is_empty(t)]) + len(
@@ -162,14 +163,14 @@ class StanceAnnotator(QMainWindow):
             self.next_random()
 
     def get_remaining_tasks(self):
-        s_col_text = "Sentence in Summary"
+        s_col_text = "sentence_in_summary"
         s_col_topic = f"{self.prefix}summary_topic"
         untagged_summary_df = self.df[self.df[s_col_topic].apply(self.is_empty)]
         unique_summary_texts = untagged_summary_df[s_col_text].unique().tolist()
 
         def get_art_text(row):
-            m = row.get("Manual match")
-            return m if not self.is_empty(m) else row.get("Best Match Sentences From Article", "")
+            m = row.get("manual_match")
+            return m if not self.is_empty(m) else row.get("best_match_sentences_from_article", "")
 
         a_col_topic = f"{self.prefix}article_topic"
         untagged_article_df = self.df[self.df[a_col_topic].apply(self.is_empty)].copy()
@@ -205,28 +206,39 @@ class StanceAnnotator(QMainWindow):
         if self.df is None:
             return
         pool = self.get_remaining_tasks()
-        # FIX: Explicitly count unique tasks remaining
         remaining = len(pool)
         self.lbl_counter.setText(f"משימות ייחודיות שנותרו: {remaining} / {self.total_unique_tasks}")
         self.lbl_task_type.setText(f"מקור: {'סיכום' if self.current_side == 'summary' else 'מאמר'}")
 
         if self.current_side == "summary":
-            count = len(self.df[self.df["Sentence in Summary"] == self.current_text])
+            count = len(self.df[self.df["sentence_in_summary"] == self.current_text])
         else:
 
             def is_match(row):
-                m = row.get("Manual match")
-                best = row.get("Best Match Sentences From Article")
+                m = row.get("manual_match")
+                best = row.get("best_match_sentences_from_article")
                 return (m if not self.is_empty(m) else best) == self.current_text
 
             count = self.df.apply(is_match, axis=1).sum()
         self.lbl_info.setText(f"מעדכן {count} שורות")
 
     def display_current(self):
-        title = "משפט מהסיכום" if self.current_side == "summary" else "משפט מהמאמר"
+        has_hebrew = any("\u0590" <= char <= "\u05ff" for char in self.current_text)
+        if has_hebrew:
+            title = "משפט מהסיכום" if self.current_side == "summary" else "משפט מהמאמר"
+            direction = "rtl"
+            text_align = "right"
+        else:
+            title = "Sentence from summary" if self.current_side == "summary" else "Sentence from article"
+            direction = "ltr"
+            text_align = "left"
+
+        escaped_text = html.escape(self.current_text).replace("\n", "<br>")
         self.text_display.setHtml(
-            f"<div style='background-color:white; padding:10px;'><h2>{title}:</h2>"
-            "<p style='font-size:22px; color:#333;'>{self.current_text}</p></div>"
+            f"<div dir='{direction}' style='background-color:white; padding:10px; text-align:{text_align};'>"
+            f"<h2>{title}:</h2>"
+            f"<p style='font-size:22px; color:#333; direction:{direction}; unicode-bidi:plaintext;'>"
+            f"{escaped_text}</p></div>"
         )
         self.input_topic.clear()
         self.radio_group.setExclusive(False)
@@ -250,12 +262,12 @@ class StanceAnnotator(QMainWindow):
         col_s = f"{self.prefix}{self.current_side}_stance"
 
         if self.current_side == "summary":
-            self.df.loc[self.df["Sentence in Summary"] == self.current_text, [col_t, col_s]] = [topic, stance]
+            self.df.loc[self.df["sentence_in_summary"] == self.current_text, [col_t, col_s]] = [topic, stance]
         else:
 
             def is_match(row):
-                m = row.get("Manual match")
-                best = row.get("Best Match Sentences From Article")
+                m = row.get("manual_match")
+                best = row.get("best_match_sentences_from_article")
                 return (m if not self.is_empty(m) else best) == self.current_text
 
             mask = self.df.apply(is_match, axis=1)

@@ -27,22 +27,7 @@ class LLMScorer:
             project=os.environ.get("OPENAI_PROJECT"),
         )
         self.model = model
-        self.prompt = """Given the following sentence of a summary and
-                    its matching sentence from an article, rate the
-                    quality of the stance preservation in the summary
-                    on a scale from 0 to 10, where 0 is very poor and
-                    10 is excellent. Remember that stance is not sen-
-                    timent. Stance refers to the position or attitude
-                    expressed in the text towards a particular topic or
-                    entity.
-                    Take into account the relation between the sum-
-                    mary sentence and the article sentence. If the
-                    stance is not preserved, reduce points from the
-                    score.
-                    Article: {article}
-                    Summary: {summary}
-                    Provide only the numeric score. No additional
-                    text."""
+        self.prompt = prompt
 
     def score(
         self,

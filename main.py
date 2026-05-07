@@ -61,6 +61,12 @@ def parse_args() -> argparse.Namespace:
         help="Which llm model to use when using text llm baseline.",
     )
     parser.add_argument(
+        "--llm-prompt",
+        type=str,
+        default="./data/prompts/prediction_prompt.txt",
+        help="Which prompt to use to classify with.",
+    )
+    parser.add_argument(
         "--nli-model",
         type=str,
         default="joeddav/xlm-roberta-large-xnli",
@@ -137,7 +143,7 @@ def main():
     elif args.model == "emb":
         scorer = EmbeddingScorer(args.embedding_model)
     elif args.model == "llm":
-        scorer = LLMScorer(args.llm_model)
+        scorer = LLMScorer(args.llm_model, prompt=args.llm_prompt)
     elif args.model == "nli":
         scorer = NLIScorer(
             args.nli_model,
