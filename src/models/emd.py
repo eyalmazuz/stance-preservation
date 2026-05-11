@@ -307,7 +307,7 @@ class EMDScorer:
             with torch.no_grad():
                 outputs = self.stance_model(**inputs)
 
-            logits = outputs.logits
+            logits = outputs.logits.double()
             probs = F.softmax(logits, dim=1).squeeze()
 
         elif self.language == "en":  # English
@@ -317,7 +317,7 @@ class EMDScorer:
             with torch.no_grad():
                 outputs = self.stance_model(**inputs)
 
-            logits = outputs.logits
+            logits = outputs.logits.double()
             probs = F.softmax(logits, dim=-1).squeeze(0)
         else:
             raise ValueError(f"Invalid language: {self.language}")
@@ -329,14 +329,22 @@ class EMDScorer:
 
     def reorder_stance_probs(self, probs: torch.Tensor) -> torch.Tensor:
         if probs.numel() != len(self.canonical_labels):
-            return probs.detach().cpu().float()
+            return self.normalize_stance_probs(probs)
 
         output_order = self.get_stance_output_order() or self.DEFAULT_STANCE_OUTPUT_ORDER
         if any(label not in output_order for label in self.canonical_labels):
-            return probs.detach().cpu().float()
+            return self.normalize_stance_probs(probs)
 
         idx_map = [output_order.index(label) for label in self.canonical_labels]
-        return probs[idx_map].detach().cpu().float()
+        return self.normalize_stance_probs(probs[idx_map])
+
+    @staticmethod
+    def normalize_stance_probs(probs: torch.Tensor) -> torch.Tensor:
+        probs = probs.detach().cpu().double()
+        total = probs.sum()
+        if not torch.isfinite(total) or total <= 0:
+            return torch.full_like(probs, 1.0 / probs.numel(), dtype=torch.float64)
+        return probs / total
 
     def get_stance_output_order(self) -> list[str] | None:
         id2label = getattr(self.stance_model.config, "id2label", None)
