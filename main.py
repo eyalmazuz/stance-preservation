@@ -195,7 +195,7 @@ def main():
             os.makedirs("./results", exist_ok=True)
         match args.aggregate_level:
             case "article":
-                file_ = f"{args.language}_scores_aricle.csv"
+                file_ = f"{args.language}_scores_article.csv"
             case "sentence":
                 file_ = f"{args.language}_scores_sentence.csv"
             case _:
