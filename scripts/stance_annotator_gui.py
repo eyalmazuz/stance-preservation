@@ -24,6 +24,20 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+STANCE_NORMALIZATION = {
+    "נייטרלי": "Neutral",
+    "ניטרלי": "Neutral",
+    "neutral": "Neutral",
+    "Neutral": "Neutral",
+    "בעד": "Favor",
+    "תומך": "Favor",
+    "favor": "Favor",
+    "Favor": "Favor",
+    "נגד": "Against",
+    "against": "Against",
+    "Against": "Against",
+}
+
 
 class StanceAnnotator(QMainWindow):
     def __init__(self):
@@ -94,6 +108,9 @@ class StanceAnnotator(QMainWindow):
         self.rb_neutral = QRadioButton("נייטרלי (1)")
         self.rb_favor = QRadioButton("בעד (2)")
         self.rb_against = QRadioButton("נגד (3)")
+        self.rb_neutral.setProperty("stance_value", "Neutral")
+        self.rb_favor.setProperty("stance_value", "Favor")
+        self.rb_against.setProperty("stance_value", "Against")
         for rb in [self.rb_neutral, self.rb_favor, self.rb_against]:
             self.radio_group.addButton(rb)
             stance_layout.addWidget(rb)
@@ -137,6 +154,12 @@ class StanceAnnotator(QMainWindow):
         s = str(val).strip().lower()
         return s in ["", "nan", "none"]
 
+    def normalize_stance(self, val):
+        if self.is_empty(val):
+            return val
+        cleaned = str(val).strip()
+        return STANCE_NORMALIZATION.get(cleaned, cleaned)
+
     def load_file(self):
         path, _ = QFileDialog.getOpenFileName(self, "טען CSV", "", "CSV Files (*.csv)")
         if path:
@@ -148,6 +171,10 @@ class StanceAnnotator(QMainWindow):
                     if col not in self.df.columns:
                         self.df[col] = ""
                     self.df[col] = self.df[col].astype(object)
+
+            for side in ["summary", "article"]:
+                stance_col = f"{self.prefix}{side}_stance"
+                self.df[stance_col] = self.df[stance_col].apply(self.normalize_stance)
 
             # Initial Total Count
             s_texts = self.df["sentence_in_summary"].dropna().unique().tolist()
@@ -256,7 +283,7 @@ class StanceAnnotator(QMainWindow):
             return
 
         selected = self.radio_group.checkedButton()
-        stance = selected.text().split(" ")[0] if selected else ""
+        stance = selected.property("stance_value") if selected else ""
 
         col_t = f"{self.prefix}{self.current_side}_topic"
         col_s = f"{self.prefix}{self.current_side}_stance"
@@ -280,6 +307,10 @@ class StanceAnnotator(QMainWindow):
             return
         path, _ = QFileDialog.getSaveFileName(self, "שמור קובץ", self.file_path, "CSV Files (*.csv)")
         if path:
+            for side in ["summary", "article"]:
+                stance_col = f"{self.prefix}{side}_stance"
+                if stance_col in self.df.columns:
+                    self.df[stance_col] = self.df[stance_col].apply(self.normalize_stance)
             self.df.to_csv(path, index=False)
 
 

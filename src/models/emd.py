@@ -15,6 +15,27 @@ from src.utils.text_utils import topics_match_soft
 
 class EMDScorer:
     TASK = "Retrieve semantically similar text."
+    DEFAULT_STANCE_OUTPUT_ORDER = ["Favor", "Against", "Neutral"]
+    LABEL_ALIASES = {
+        "FAVOR": "Favor",
+        "FAVOUR": "Favor",
+        "PRO": "Favor",
+        "SUPPORT": "Favor",
+        "SUPPORTS": "Favor",
+        "SUPPORTING": "Favor",
+        "בעד": "Favor",
+        "תומך": "Favor",
+        "AGAINST": "Against",
+        "CON": "Against",
+        "OPPOSE": "Against",
+        "OPPOSES": "Against",
+        "OPPOSING": "Against",
+        "נגד": "Against",
+        "מתנגד": "Against",
+        "NEUTRAL": "Neutral",
+        "NONE": "Neutral",
+        "נייטרלי": "Neutral",
+    }
 
     def __init__(
         self,
@@ -32,6 +53,7 @@ class EMDScorer:
     ) -> None:
         self.matching_model = self.get_matching_model(matching_model_name)
         self.matching_model_name = matching_model_name
+        self.topic_model_name = topic_model_name
         self.topic_model, self.topic_tokenizer = self.get_topic_model(topic_model_name)
         self.stance_model, self.stance_tokenizer = self.get_stance_model(stance_model_name)
         self.aggregate = aggregate
@@ -192,6 +214,11 @@ class EMDScorer:
     def get_stance_model(self, model_name: str):
         model = AutoModelForSequenceClassification.from_pretrained(model_name)
         tokenizer = AutoTokenizer.from_pretrained(model_name)
+        if tokenizer.pad_token is None and tokenizer.eos_token is not None:
+            tokenizer.pad_token = tokenizer.eos_token
+        if model.config.pad_token_id is None and tokenizer.pad_token_id is not None:
+            model.config.pad_token_id = tokenizer.pad_token_id
+        model.eval()
 
         return model, tokenizer
 
@@ -228,6 +255,28 @@ class EMDScorer:
     def get_topic(self, full_text: str, sentence: str) -> str:
         prompt = get_emd_prompt(self.language).format(context=full_text, sentence=sentence)
 
+        if self.should_use_topic_chat_template():
+            messages = [{"role": "user", "content": prompt}]
+            inputs = self.topic_tokenizer.apply_chat_template(
+                messages,
+                tokenize=True,
+                add_generation_prompt=True,
+                return_tensors="pt",
+            ).to(self.topic_model.device)
+            prompt_length = inputs.shape[1]
+
+            with torch.no_grad():
+                outputs = self.topic_model.generate(
+                    inputs,
+                    do_sample=False,
+                    max_new_tokens=30 if self.language == "en" else 20,
+                    pad_token_id=self.topic_tokenizer.eos_token_id,
+                )
+
+            topic_tokens = outputs[0][prompt_length:]
+            topic = self.topic_tokenizer.decode(topic_tokens, skip_special_tokens=True).strip()
+            return topic.split("\n")[0].strip()
+
         inputs = self.topic_tokenizer(prompt.strip(), return_tensors="pt", padding=True).to(self.topic_model.device)
         prompt_length = inputs.input_ids.shape[1]
 
@@ -244,10 +293,17 @@ class EMDScorer:
         topic = self.topic_tokenizer.decode(topic_tokens, skip_special_tokens=True).strip()
         return topic.split("\n")[0]
 
+    def should_use_topic_chat_template(self) -> bool:
+        return (
+            self.topic_model_name != "dicta-il/dictalm2.0"
+            and getattr(self.topic_tokenizer, "chat_template", None) is not None
+        )
+
     def get_stance(self, sentence: str, topic: str):
         if self.language == "he":
             combined_input = f"{sentence} [SEP] {topic}"
             inputs = self.stance_tokenizer(combined_input, return_tensors="pt", truncation=True, padding=True)
+            inputs = inputs.to(self.get_stance_device())
             with torch.no_grad():
                 outputs = self.stance_model(**inputs)
 
@@ -255,6 +311,54 @@ class EMDScorer:
             probs = F.softmax(logits, dim=1).squeeze()
 
         elif self.language == "en":  # English
-            pass
+            combined_input = f"TOPIC: {topic}\nTEXT: {sentence}"
+            inputs = self.stance_tokenizer(combined_input, return_tensors="pt", truncation=True, padding=True)
+            inputs = inputs.to(self.get_stance_device())
+            with torch.no_grad():
+                outputs = self.stance_model(**inputs)
 
-        return probs
+            logits = outputs.logits
+            probs = F.softmax(logits, dim=-1).squeeze(0)
+        else:
+            raise ValueError(f"Invalid language: {self.language}")
+
+        return self.reorder_stance_probs(probs)
+
+    def get_stance_device(self) -> torch.device:
+        return next(self.stance_model.parameters()).device
+
+    def reorder_stance_probs(self, probs: torch.Tensor) -> torch.Tensor:
+        if probs.numel() != len(self.canonical_labels):
+            return probs.detach().cpu().float()
+
+        output_order = self.get_stance_output_order() or self.DEFAULT_STANCE_OUTPUT_ORDER
+        if any(label not in output_order for label in self.canonical_labels):
+            return probs.detach().cpu().float()
+
+        idx_map = [output_order.index(label) for label in self.canonical_labels]
+        return probs[idx_map].detach().cpu().float()
+
+    def get_stance_output_order(self) -> list[str] | None:
+        id2label = getattr(self.stance_model.config, "id2label", None)
+        if not id2label:
+            return None
+
+        labels_by_index: dict[int, str] = {}
+        for raw_index, raw_label in id2label.items():
+            try:
+                index = int(raw_index)
+            except (TypeError, ValueError):
+                return None
+            label = self.normalize_stance_label(str(raw_label))
+            if label is None:
+                return None
+            labels_by_index[index] = label
+
+        return [labels_by_index[index] for index in sorted(labels_by_index)]
+
+    @classmethod
+    def normalize_stance_label(cls, label: str) -> str | None:
+        label_key = label.strip().replace("-", "_").replace(" ", "_").upper()
+        if "_" in label_key:
+            label_key = label_key.rsplit("_", maxsplit=1)[-1]
+        return cls.LABEL_ALIASES.get(label_key)

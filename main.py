@@ -67,6 +67,12 @@ def parse_args() -> argparse.Namespace:
         help="Which prompt to use to classify with.",
     )
     parser.add_argument(
+        "--llm-concurrency",
+        type=int,
+        default=1,
+        help="How many OpenAI LLM scoring calls to run in parallel within each article-summary pair.",
+    )
+    parser.add_argument(
         "--nli-model",
         type=str,
         default="joeddav/xlm-roberta-large-xnli",
@@ -143,7 +149,7 @@ def main():
     elif args.model == "emb":
         scorer = EmbeddingScorer(args.embedding_model)
     elif args.model == "llm":
-        scorer = LLMScorer(args.llm_model, prompt=args.llm_prompt)
+        scorer = LLMScorer(args.llm_model, prompt=args.llm_prompt, max_workers=args.llm_concurrency)
     elif args.model == "nli":
         scorer = NLIScorer(
             args.nli_model,
