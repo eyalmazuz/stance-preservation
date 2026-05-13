@@ -80,7 +80,7 @@ class LLMScorer:
                 },
                 {
                     "role": "user",
-                    "content": self.build_prompt(article, summary),
+                    "content": self.build_prompt(summary=summary, article=article),
                 },
             ],
             text_format=ScoreResponse,

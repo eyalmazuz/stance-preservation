@@ -21,6 +21,17 @@ def parse_args() -> argparse.Namespace:
         help="Which annotation to use as the ground truth.",
     )
     parser.add_argument(
+        "--score-method",
+        type=str,
+        choices=["exact", "conditional-soft", "coverage-soft"],
+        default="exact",
+        help=(
+            "Which gold score to use. exact is same-stance over same-topic pairs. "
+            "conditional-soft is soft stance preservation over same-topic pairs. "
+            "coverage-soft is coverage-weighted soft stance preservation over all summary pairs."
+        ),
+    )
+    parser.add_argument(
         "--no-save-preds",
         action="store_true",
         default=False,
@@ -109,6 +120,12 @@ def parse_args() -> argparse.Namespace:
         help="Whether to filter pairs based on if the topic match.",
     )
     parser.add_argument(
+        "--use-topic-mismatch-filtering",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Whether to filter BLEU pairs to gold topic mismatches only.",
+    )
+    parser.add_argument(
         "--debug",
         action=argparse.BooleanOptionalAction,
         default=False,
@@ -133,15 +150,27 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help="Whether to weight the EMD score by the cosine sim.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.use_topic_filtering and args.use_topic_mismatch_filtering:
+        parser.error("--use-topic-filtering and --use-topic-mismatch-filtering are mutually exclusive.")
+    if args.use_topic_mismatch_filtering and args.model != "bleu":
+        parser.error("--use-topic-mismatch-filtering is currently supported only with --model bleu.")
+    return args
 
 
 def main():
     args = parse_args()
     df = pl.read_csv(args.input_file)
 
+    bleu_topic_diagnostic = args.model == "bleu" and (args.use_topic_filtering or args.use_topic_mismatch_filtering)
+
     if args.model == "bleu":
-        scorer = BleuScorer()
+        bleu_topic_filter = None
+        if args.use_topic_filtering:
+            bleu_topic_filter = "match"
+        elif args.use_topic_mismatch_filtering:
+            bleu_topic_filter = "mismatch"
+        scorer = BleuScorer(topic_filter=bleu_topic_filter)
     elif args.model.startswith("rouge"):
         scorer = RougeScorer(args.model)
     elif args.model == "tf-idf":
@@ -176,9 +205,9 @@ def main():
     scores: list[float] = []
     preds: list[float] = []
 
-    data = process_data(df, args.label_prefix)
+    data = process_data(df, args.label_prefix, args.score_method)
     for pair in tqdm(data):
-        if args.aggregate_level == "sentence" or args.model == "nli":
+        if args.aggregate_level == "sentence" or args.model == "nli" or bleu_topic_diagnostic:
             hypotheses = pair.summary_data
             references = pair.article_data
         else:
@@ -196,7 +225,7 @@ def main():
     if hasattr(scorer, "print_filter_summary") and isinstance(scorer, EMDScorer):
         scorer.print_filter_summary()
 
-    if not args.no_save_preds:
+    if not args.no_save_preds and not bleu_topic_diagnostic:
         if not os.path.exists("./results"):
             os.makedirs("./results", exist_ok=True)
         match args.aggregate_level:
@@ -206,18 +235,33 @@ def main():
                 file_ = f"{args.language}_scores_sentence.csv"
             case _:
                 raise ValueError(f"Invalid aggregate type: {args.aggregate_level}")
+        pred_col = f"{args.model}_preds"
+        pred_df = pl.from_dict(
+            {
+                "article": [pair.article for pair in data],
+                "summary": [pair.summary for pair in data],
+                "score": [pair.score for pair in data],
+                pred_col: preds,
+            }
+        )
         if not os.path.exists(f"./results/{file_}"):
-            df = pl.from_dict(
-                {
-                    "article": [pair.article for pair in data],
-                    "summary": [pair.summary for pair in data],
-                    "score": [pair.score for pair in data],
-                }
-            )
+            df = pred_df
         else:
-            df = pl.read_csv(f"./results/{file_}")
+            existing_df = pl.read_csv(f"./results/{file_}")
+            existing_pred_cols = [
+                column
+                for column in existing_df.columns
+                if column not in {"article", "summary", "score", pred_col}
+            ]
+            df = pred_df.select(["article", "summary", "score"])
+            if existing_pred_cols:
+                df = df.join(
+                    existing_df.select(["article", "summary", *existing_pred_cols]),
+                    on=["article", "summary"],
+                    how="left",
+                )
+            df = df.join(pred_df.select(["article", "summary", pred_col]), on=["article", "summary"], how="left")
 
-        df = df.with_columns(pl.Series(f"{args.model}_preds", preds))
         df.write_csv(f"./results/{file_}")
 
 

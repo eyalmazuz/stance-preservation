@@ -155,8 +155,8 @@ class EMDScorer:
             )
 
         if kept == 0:
-            return 2.0
-        return emd_score / kept
+            return 0.0
+        return 2.0 - (emd_score / kept)
 
     def print_filter_summary(self) -> None:
         if not self.debug or not (self.use_topic_filtering or self.use_soft_topic_filtering) or not self.filter_stats:

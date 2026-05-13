@@ -1,6 +1,7 @@
 import os
 
 import numpy as np
+import tiktoken
 
 from openai import OpenAI
 from sklearn.metrics.pairwise import cosine_similarity
@@ -17,6 +18,7 @@ class EmbeddingScorer:
     def __init__(
         self,
         model: str = "text-embedding-3-large",
+        max_input_tokens: int = 8191,
     ) -> None:
         self.client = OpenAI(
             api_key=os.environ.get("OPENAI_API_KEY"),
@@ -24,6 +26,11 @@ class EmbeddingScorer:
             project=os.environ.get("OPENAI_PROJECT"),
         )
         self.model = model
+        self.max_input_tokens = max_input_tokens
+        try:
+            self.encoding = tiktoken.encoding_for_model(model)
+        except KeyError:
+            self.encoding = tiktoken.get_encoding("cl100k_base")
 
     def score(
         self,
@@ -50,7 +57,13 @@ class EmbeddingScorer:
     def get_embedding(self, texts: str | list[str], model="text-embedding-3-small"):
         if isinstance(texts, str):
             texts = [texts]
-        texts = [text.replace("\n", " ")[:8191] for text in texts]
+        texts = [self.truncate_text(text.replace("\n", " ")) for text in texts]
         response = self.client.embeddings.create(input=texts, model=self.model)
         embeddings = [res.embedding for res in response.data]
         return np.array(embeddings)
+
+    def truncate_text(self, text: str) -> str:
+        tokens = self.encoding.encode(text)
+        if len(tokens) <= self.max_input_tokens:
+            return text
+        return self.encoding.decode(tokens[: self.max_input_tokens])
