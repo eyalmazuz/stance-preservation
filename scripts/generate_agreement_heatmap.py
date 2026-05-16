@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 
-from collections.abc import Callable
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -10,19 +9,23 @@ import numpy as np
 import polars as pl
 import seaborn as sns
 
-from calculate_majority import (
-    TARGET_SUFFIXES,
-    build_majority_column,
-    build_topic_canonical_map,
-    find_annotator_b_column,
-    find_label_columns,
-    normalize_stance,
-    normalize_topic,
-)
-
 ROOT_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_INPUT = ROOT_DIR / "data" / "datasets" / "hebrew_data_labeled.csv"
 DEFAULT_OUTPUT = ROOT_DIR / "heatmap.png"
+STANCE_MAP = {
+    "בעד": "Favor",
+    "תומך": "Favor",
+    "favor": "Favor",
+    "against": "Against",
+    "נגד": "Against",
+    "נוגד": "Against",
+    "<נגד>": "Against",
+    "neutral": "Neutral",
+    "נייטרלי": "Neutral",
+    "ניטרלי": "Neutral",
+    "עמדה נייטרלית": "Neutral",
+    "<נייטרלי>": "Neutral",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -67,6 +70,57 @@ def cohen_kappa(left: list[str | None], right: list[str | None]) -> float:
     return (agreement - expected) / (1 - expected)
 
 
+def is_missing(value: object) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, float) and value != value:
+        return True
+    return str(value).strip().lower() in {"", "nan", "null", "none"}
+
+
+def normalize_topic(value: object) -> str | None:
+    if is_missing(value):
+        return None
+    return str(value).strip()
+
+
+def normalize_stance(value: object) -> str | None:
+    if is_missing(value):
+        return None
+
+    cleaned = str(value).strip()
+    if cleaned in {"Favor", "Against", "Neutral"}:
+        return cleaned
+
+    mapped = STANCE_MAP.get(cleaned.lower())
+    if mapped is not None:
+        return mapped
+
+    mapped = STANCE_MAP.get(cleaned)
+    if mapped is not None:
+        return mapped
+
+    return cleaned
+
+
+def normalize_value(value: object, suffix: str) -> str | None:
+    if suffix.endswith("_topic"):
+        return normalize_topic(value)
+    return normalize_stance(value)
+
+
+def find_label_columns(columns: list[str], suffix: str) -> list[str]:
+    return [column for column in columns if column.endswith(f"_{suffix}")]
+
+
+def order_label_columns(columns: list[str], suffix: str) -> list[str]:
+    majority_column = f"majority_{suffix}"
+    non_majority_columns = [column for column in columns if column != majority_column]
+    if majority_column in columns:
+        return [*non_majority_columns, majority_column]
+    return non_majority_columns
+
+
 def display_name(column: str, suffix: str) -> str:
     if column == f"majority_{suffix}":
         return "Majority"
@@ -74,53 +128,16 @@ def display_name(column: str, suffix: str) -> str:
     return prefix.rstrip("_")
 
 
-def build_normalizers(df: pl.DataFrame) -> dict[str, Callable[[object], str | None]]:
-    topic_columns = [
-        column for suffix in ("summary_topic", "article_topic") for column in find_label_columns(df.columns, suffix)
-    ]
-    topic_canonical_map = build_topic_canonical_map(df, topic_columns)
-
-    def normalize_topic_group(value: object) -> str | None:
-        topic = normalize_topic(value)
-        if topic is None:
-            return None
-        return topic_canonical_map.get(topic, topic)
-
-    return {
-        "summary_topic": normalize_topic_group,
-        "article_topic": normalize_topic_group,
-        "summary_stance": normalize_stance,
-        "article_stance": normalize_stance,
-    }
-
-
-def add_majority_columns(df: pl.DataFrame, normalizers: dict[str, Callable[[object], str | None]]) -> pl.DataFrame:
-    result = df
-    for suffix in TARGET_SUFFIXES:
-        source_columns = find_label_columns(df.columns, suffix)
-        tie_break_column = find_annotator_b_column(df.columns, suffix)
-        majority_values = build_majority_column(
-            result,
-            source_columns,
-            normalizers[suffix],
-            tie_break_column=tie_break_column,
-        )
-        result = result.with_columns(pl.Series(f"majority_{suffix}", majority_values))
-    return result
-
-
 def collect_normalized_columns(
     df: pl.DataFrame,
     suffix: str,
-    normalizer: Callable[[object], str | None],
 ) -> tuple[list[str], dict[str, list[str | None]]]:
-    source_columns = [column for column in find_label_columns(df.columns, suffix) if column != f"majority_{suffix}"]
-    columns = [*source_columns, f"majority_{suffix}"]
+    columns = order_label_columns(find_label_columns(df.columns, suffix), suffix)
     values: dict[str, list[str | None]] = {}
 
     for column in columns:
         series_values = df.get_column(column).to_list()
-        values[column] = [normalizer(value) for value in series_values]
+        values[column] = [normalize_value(value, suffix) for value in series_values]
 
     return columns, values
 
@@ -148,9 +165,6 @@ def suffix_title(suffix: str) -> str:
 
 
 def plot_heatmaps(df: pl.DataFrame, output_png: Path) -> None:
-    normalizers = build_normalizers(df)
-    enriched_df = add_majority_columns(df, normalizers)
-
     sns.set_theme(style="white", font_scale=0.9)
     fig, axes = plt.subplots(2, 2, figsize=(18, 14))
     axes_by_suffix = {
@@ -161,7 +175,9 @@ def plot_heatmaps(df: pl.DataFrame, output_png: Path) -> None:
     }
 
     for suffix, axis in axes_by_suffix.items():
-        ordered_columns, normalized_values = collect_normalized_columns(enriched_df, suffix, normalizers[suffix])
+        ordered_columns, normalized_values = collect_normalized_columns(df, suffix)
+        if not ordered_columns:
+            raise ValueError(f"No columns found for suffix: {suffix}")
         matrix = build_kappa_matrix(ordered_columns, normalized_values)
         labels = [display_name(column, suffix) for column in ordered_columns]
         mask = np.triu(np.ones_like(matrix, dtype=bool), k=1)
@@ -185,7 +201,7 @@ def plot_heatmaps(df: pl.DataFrame, output_png: Path) -> None:
         axis.tick_params(axis="x", rotation=45)
         axis.tick_params(axis="y", rotation=0)
 
-    fig.suptitle("Inter-Annotator Agreement Including Majority", fontsize=16)
+    fig.suptitle("Inter-Annotator Agreement", fontsize=16)
     fig.tight_layout(rect=(0, 0, 1, 0.98))
     output_png.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_png, dpi=300, bbox_inches="tight")

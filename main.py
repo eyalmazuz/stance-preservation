@@ -7,6 +7,7 @@ from scipy.stats import kendalltau, pearsonr, spearmanr
 from tqdm.auto import tqdm
 
 from src.models import BleuScorer, EmbeddingScorer, EMDScorer, LLMScorer, NLIScorer, RougeScorer, TfIdfScorer
+from src.models.nli import NLI_SCORE_METHODS
 from src.utils.data_utils import process_data
 
 
@@ -88,6 +89,16 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="joeddav/xlm-roberta-large-xnli",
         help="Which NLI model to use when using text NLI baseline.",
+    )
+    parser.add_argument(
+        "--nli-score-method",
+        type=str,
+        choices=NLI_SCORE_METHODS,
+        default="preservation",
+        help=(
+            "Which NLI scoring method to use. shift is the previous signed mean stance shift. "
+            "preservation is 1 - abs(E[Stance_summary] - E[Stance_source]) / 2."
+        ),
     )
     parser.add_argument(
         "--matching-model",
@@ -184,6 +195,7 @@ def main():
             args.nli_model,
             args.aggregate_level,
             args.language,
+            args.nli_score_method,
         )
     elif args.model == "emd":
         scorer = EMDScorer(
@@ -236,6 +248,8 @@ def main():
             case _:
                 raise ValueError(f"Invalid aggregate type: {args.aggregate_level}")
         pred_col = f"{args.model}_preds"
+        if args.model == "nli":
+            pred_col = f"nli_{args.nli_score_method}_preds"
         pred_df = pl.from_dict(
             {
                 "article": [pair.article for pair in data],

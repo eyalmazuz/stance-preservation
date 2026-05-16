@@ -183,75 +183,34 @@ def get_hebrew_prompt_template_original_examples() -> str:
 def get_english_prompt_template() -> str:
     dynamic_examples = [
         {
-            "sentence": (
-                "It emerges from an analysis of 7,500 studies published on the subject between the years 1973 "
-                "and 2011 that over the past 40 years there has been an ongoing downward trend in male fertility "
-                "in the Western world, and a decline of more than 50 percent has been recorded in sperm "
-                "concentration and sperm count."
-            ),
-            "analysis": (
-                "This refers to male fertility in the Western world, and a decline in sperm concentration and sperm "
-                "count."
-            ),
-            "topic": "Male fertility",
+            "sentence": "The Ministry of Education will expand the educational gardens program so that all fourth-grade students will grow vegetables as part of science classes.",
+            "analysis": "This concerns the expansion of the educational gardens program in schools.",
+            "topic": "Educational gardens",
         },
         {
-            "sentence": (
-                "With the heat loads of summer and the increase in the use of air conditioners, malfunctions also "
-                "increase, and this guide reviews the common malfunctions, repair costs, and recommendations for "
-                "choosing an air conditioner."
-            ),
-            "analysis": "This concerns air conditioners, common malfunctions, and repair costs.",
-            "topic": "Air conditioning maintenance",
+            "sentence": "An inspection conducted at the port found that delays in unloading containers are mainly caused by a shortage of truck drivers at night.",
+            "analysis": "This refers to the delays in unloading containers at the port.",
+            "topic": "Unloading containers",
         },
         {
-            "sentence": (
-                "The Ministry of Health published the coronavirus morbidity data: the percentage of positive cases "
-                "has decreased; in Israel there are 8,310 active patients; the total number of recovered stands at "
-                "325,862; the number of deaths since the outbreak of the pandemic stands at 2,735."
-            ),
-            "analysis": "This concerns coronavirus morbidity data in Israel.",
-            "topic": "Covid-19",
+            "sentence": "Israeli developers presented a new chip that allows running artificial intelligence models on drones without a cloud connection.",
+            "analysis": "This is about a new chip developed for drones to run AI models.",
+            "topic": "Drone chips",
         },
         {
-            "sentence": (
-                "As part of these creative solutions, the childhood games of the parents' generation, who did not "
-                "know the internet, tablets, iPhones, or Xbox, and made do with street games with other children, "
-                "have recently been returning to us."
-            ),
-            "analysis": (
-                "This refers to the childhood games of the parents' generation, games without modern technology."
-            ),
-            "topic": "Games",
+            "sentence": "The municipal library has opened a fast borrowing track that allows ordering books in the app and collecting them from a smart locker on the street.",
+            "analysis": "This concerns a new fast track for borrowing books from the library.",
+            "topic": "Book borrowing",
         },
         {
-            "sentence": (
-                "Israel declared that it will not allow the rehabilitation of Gaza without a solution to the issue "
-                "of the captives and the missing, but it remains to be seen whether it will succeed in upholding "
-                "its promise."
-            ),
-            "analysis": (
-                "This refers to Israel's declaration regarding the rehabilitation of Gaza and the issue of the "
-                "captives and the missing."
-            ),
-            "topic": "Gaza rehabilitation",
+            "sentence": "The Farmers' Association warns that a shortage of harvest workers is expected to lead to an increase in peach prices early in the season.",
+            "analysis": "This refers to the shortage of harvest workers and its effect on prices.",
+            "topic": "Harvest workers",
         },
         {
-            "sentence": (
-                "Since the price between them was equalized, leisure vehicles have been nipping at the heels of "
-                "family cars in sales, with importers of family cars being forced to lower prices or raise the "
-                "level of equipment."
-            ),
-            "analysis": "This concerns leisure vehicles versus family cars, and the effect of price on sales.",
-            "topic": "SUVs",
-        },
-        {
-            "sentence": (
-                "The fungus, cordyceps by name, takes over the brains of ants and compels them to climb to great "
-                "heights in order to disperse its spores."
-            ),
-            "analysis": "This refers to a fungus called cordyceps that affects ants.",
-            "topic": "Cordyceps",
+            "sentence": "A new initiative connects students with the elderly for weekly home visits and guidance on using digital services.",
+            "analysis": "This is about a new initiative providing digital assistance to the elderly.",
+            "topic": "Digital assistance",
         },
     ]
 

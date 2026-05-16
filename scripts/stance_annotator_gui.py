@@ -42,9 +42,9 @@ STANCE_NORMALIZATION = {
 class StanceAnnotator(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("כלי תיוג עמדות ונושאים (Deduplicated) - Annotator B")
+        self.setWindowTitle("Stance and Topic Annotation Tool (Deduplicated) - Annotator B")
         self.setGeometry(100, 100, 1000, 800)
-        self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        self.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
 
         self.setStyleSheet("""
             QMainWindow, QWidget { background-color: #f5f5f5; color: #000; font-family: 'Arial'; }
@@ -71,9 +71,9 @@ class StanceAnnotator(QMainWindow):
         main_layout = QVBoxLayout(central_widget)
 
         top_layout = QHBoxLayout()
-        self.btn_load = QPushButton("📂 טען CSV")
+        self.btn_load = QPushButton("📂 Load CSV")
         self.btn_load.clicked.connect(self.load_file)
-        self.btn_save = QPushButton("💾 שמור קובץ...")
+        self.btn_save = QPushButton("💾 Save File...")
         self.btn_save.clicked.connect(self.save_file)
         top_layout.addWidget(self.btn_load)
         top_layout.addWidget(self.btn_save)
@@ -82,8 +82,8 @@ class StanceAnnotator(QMainWindow):
         self.status_frame = QFrame()
         self.status_frame.setStyleSheet("background-color: #333; color: white; border-radius: 0px;")
         status_layout = QHBoxLayout(self.status_frame)
-        self.lbl_task_type = QLabel("ממתין לטעינה...")
-        self.lbl_counter = QLabel("משימות: 0 / 0")
+        self.lbl_task_type = QLabel("Waiting for file...")
+        self.lbl_counter = QLabel("Tasks: 0 / 0")
         self.lbl_info = QLabel("-")
         for lbl in [self.lbl_task_type, self.lbl_counter, self.lbl_info]:
             lbl.setStyleSheet("color: white; font-weight: bold; font-size: 16px;")
@@ -98,35 +98,35 @@ class StanceAnnotator(QMainWindow):
         input_frame.setStyleSheet("background-color: #e0e0e0; padding: 15px; border-top: 2px solid #bbb;")
         form_layout = QFormLayout(input_frame)
         self.input_topic = QLineEdit()
-        self.input_topic.setPlaceholderText("הזן נושא...")
+        self.input_topic.setPlaceholderText("Enter topic...")
         self.input_topic.returnPressed.connect(self.submit_data)
-        form_layout.addRow(QLabel("<b>נושא:</b>"), self.input_topic)
+        form_layout.addRow(QLabel("<b>Topic:</b>"), self.input_topic)
 
         stance_widget = QWidget()
         stance_layout = QHBoxLayout(stance_widget)
         self.radio_group = QButtonGroup(self)
-        self.rb_neutral = QRadioButton("נייטרלי (1)")
-        self.rb_favor = QRadioButton("בעד (2)")
-        self.rb_against = QRadioButton("נגד (3)")
+        self.rb_neutral = QRadioButton("Neutral (1)")
+        self.rb_favor = QRadioButton("Favor (2)")
+        self.rb_against = QRadioButton("Against (3)")
         self.rb_neutral.setProperty("stance_value", "Neutral")
         self.rb_favor.setProperty("stance_value", "Favor")
         self.rb_against.setProperty("stance_value", "Against")
         for rb in [self.rb_neutral, self.rb_favor, self.rb_against]:
             self.radio_group.addButton(rb)
             stance_layout.addWidget(rb)
-        form_layout.addRow(QLabel("<b>עמדה:</b>"), stance_widget)
+        form_layout.addRow(QLabel("<b>Stance:</b>"), stance_widget)
         main_layout.addWidget(input_frame)
 
         btn_layout = QHBoxLayout()
-        self.btn_back = QPushButton("⬅️ חזור אחורה")
+        self.btn_back = QPushButton("⬅️ Back")
         self.btn_back.setStyleSheet("background-color: #ff9800; color: white; font-size: 16px;")
         self.btn_back.clicked.connect(self.undo_step)
 
-        self.btn_submit = QPushButton("✅ שמור והמשך (Enter)")
+        self.btn_submit = QPushButton("✅ Save and Continue (Enter)")
         self.btn_submit.setStyleSheet("background-color: #2e7d32; color: white; font-size: 18px;")
         self.btn_submit.clicked.connect(self.submit_data)
 
-        self.btn_skip = QPushButton("⏭️ דלג (Delete)")
+        self.btn_skip = QPushButton("⏭️ Skip (Delete)")
         self.btn_skip.clicked.connect(self.next_random)
 
         btn_layout.addWidget(self.btn_back, 1)
@@ -161,7 +161,7 @@ class StanceAnnotator(QMainWindow):
         return STANCE_NORMALIZATION.get(cleaned, cleaned)
 
     def load_file(self):
-        path, _ = QFileDialog.getOpenFileName(self, "טען CSV", "", "CSV Files (*.csv)")
+        path, _ = QFileDialog.getOpenFileName(self, "Load CSV", "", "CSV Files (*.csv)")
         if path:
             self.df = pd.read_csv(path)
             self.file_path = path
@@ -220,11 +220,11 @@ class StanceAnnotator(QMainWindow):
             self.current_text, self.current_side = random.choice(pool)
             self.display_current()
         else:
-            QMessageBox.information(self, "סיום", "כל המשימות הושלמו!")
+            QMessageBox.information(self, "Complete", "All tasks are complete!")
 
     def undo_step(self):
         if not self.history:
-            QMessageBox.warning(self, "אופס", "אין צעדים נוספים לחזור אליהם!")
+            QMessageBox.warning(self, "Nothing to Undo", "There are no more steps to go back to!")
             return
         self.current_text, self.current_side = self.history.pop()
         self.display_current()
@@ -234,8 +234,9 @@ class StanceAnnotator(QMainWindow):
             return
         pool = self.get_remaining_tasks()
         remaining = len(pool)
-        self.lbl_counter.setText(f"משימות ייחודיות שנותרו: {remaining} / {self.total_unique_tasks}")
-        self.lbl_task_type.setText(f"מקור: {'סיכום' if self.current_side == 'summary' else 'מאמר'}")
+        self.lbl_counter.setText(f"Unique tasks remaining: {remaining} / {self.total_unique_tasks}")
+        source = "Summary" if self.current_side == "summary" else "Article"
+        self.lbl_task_type.setText(f"Source: {source}")
 
         if self.current_side == "summary":
             count = len(self.df[self.df["sentence_in_summary"] == self.current_text])
@@ -247,12 +248,12 @@ class StanceAnnotator(QMainWindow):
                 return (m if not self.is_empty(m) else best) == self.current_text
 
             count = self.df.apply(is_match, axis=1).sum()
-        self.lbl_info.setText(f"מעדכן {count} שורות")
+        self.lbl_info.setText(f"Updating {count} rows")
 
     def display_current(self):
         has_hebrew = any("\u0590" <= char <= "\u05ff" for char in self.current_text)
         if has_hebrew:
-            title = "משפט מהסיכום" if self.current_side == "summary" else "משפט מהמאמר"
+            title = "Sentence from summary" if self.current_side == "summary" else "Sentence from article"
             direction = "rtl"
             text_align = "right"
         else:
@@ -305,7 +306,7 @@ class StanceAnnotator(QMainWindow):
     def save_file(self):
         if self.df is None:
             return
-        path, _ = QFileDialog.getSaveFileName(self, "שמור קובץ", self.file_path, "CSV Files (*.csv)")
+        path, _ = QFileDialog.getSaveFileName(self, "Save File", self.file_path, "CSV Files (*.csv)")
         if path:
             for side in ["summary", "article"]:
                 stance_col = f"{self.prefix}{side}_stance"

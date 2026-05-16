@@ -1,10 +1,22 @@
 from transformers import pipeline
 
+NLI_SCORE_METHODS = ("shift", "preservation")
+
 
 class NLIScorer:
-    def __init__(self, model_name: str, aggregate: str, language: str = "he") -> None:
+    def __init__(
+        self,
+        model_name: str,
+        aggregate: str,
+        language: str = "he",
+        score_method: str = "preservation",
+    ) -> None:
+        if score_method not in NLI_SCORE_METHODS:
+            raise ValueError(f"Invalid NLI score method: {score_method}.")
+
         self.model_name = model_name
         self.aggregate = aggregate
+        self.score_method = score_method
         # self.model = AutoModel.from_pretrained(self.model_name)
         # self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.pipeline = pipeline("zero-shot-classification", model=self.model_name, truncation=True)
@@ -12,12 +24,11 @@ class NLIScorer:
         self.stance_to_score = {"Favor": +1.0, "Against": -1.0, "Neutral": 0.0}
 
     def score(self, hypotheses: str | list[dict[str, str]], references: str | list[dict[str, str]], **kwargs) -> float:
-        shift_score: float = 0.0
-
         if isinstance(hypotheses, str) and isinstance(references, str):
             hypotheses: list[str] = [hypotheses]
             references: list[str] = [references]
 
+        shift_score: float = 0.0
         for hyp, ref in zip(hypotheses, references):
             hyp_text, hyp_topic = self.get_data(hyp)
             ref_text, ref_topic = self.get_data(ref)
@@ -30,7 +41,10 @@ class NLIScorer:
 
             shift_score += hyp_score - ref_score
 
-        return shift_score / len(hypotheses)
+        mean_shift = shift_score / len(hypotheses)
+        if self.score_method == "shift":
+            return mean_shift
+        return 1.0 - abs(mean_shift) / 2.0
 
     def predict(self, text: str, topic: str):
         res = self.pipeline(
