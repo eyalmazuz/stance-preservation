@@ -50,6 +50,7 @@ class EMDScorer:
         use_dist_topic_score: bool = False,
         use_weighted_emd: bool = False,
         debug: bool = False,
+        score_method: str = "emd",
     ) -> None:
         self.matching_model = self.get_matching_model(matching_model_name)
         self.matching_model_name = matching_model_name
@@ -65,6 +66,7 @@ class EMDScorer:
         self.use_dist_topic_score = use_dist_topic_score
         self.use_weighted_emd = use_weighted_emd
         self.debug = debug
+        self.score_method = score_method
         self.filter_stats: list[dict[str, float]] = []
         self.stance_value = {"Against": -1, "Neutral": 0, "Favor": 1}
         self.C = np.array(
@@ -123,20 +125,36 @@ class EMDScorer:
                 skipped_entropy += 1
                 continue
 
-            stance_emd = ot.emd2(
-                ref_stance_probs.numpy().astype(np.float64),
-                hyp_stance_probs.numpy().astype(np.float64),
-                np.array(self.C).astype(np.float64),
-            )
+            if self.score_method == "emd":
+                stance_dist = ot.emd2(
+                    ref_stance_probs.numpy().astype(np.float64),
+                    hyp_stance_probs.numpy().astype(np.float64),
+                    np.array(self.C).astype(np.float64),
+                )
+            elif self.score_method == "kl":
+                stance_dist = F.kl_div(torch.log(hyp_stance_probs + 1e-9), ref_stance_probs, reduction="sum").item()
+            elif self.score_method == "js":
+                m = 0.5 * (ref_stance_probs + hyp_stance_probs)
+                stance_dist = 0.5 * F.kl_div(torch.log(ref_stance_probs + 1e-9), m, reduction="sum").item() + \
+                              0.5 * F.kl_div(torch.log(hyp_stance_probs + 1e-9), m, reduction="sum").item()
+            elif self.score_method == "argmax_ordinal":
+                ref_label = self.canonical_labels[torch.argmax(ref_stance_probs).item()]
+                hyp_label = self.canonical_labels[torch.argmax(hyp_stance_probs).item()]
+                stance_dist = float(abs(self.stance_value[ref_label] - self.stance_value[hyp_label]))
+            elif self.score_method == "argmax_exact":
+                stance_dist = 0.0 if torch.argmax(ref_stance_probs).item() == torch.argmax(hyp_stance_probs).item() else 1.0
+            else:
+                raise ValueError(f"Invalid score method: {self.score_method}")
+
             if self.use_dist_topic_score:
                 topic_similarity = (
                     (self.encode_text([hyp_topic]) @ self.encode_text([ref_topic]).T).squeeze().cpu().item()
                 )
-                emd_score += stance_emd + 0.5 * (1 - topic_similarity)
+                emd_score += stance_dist + 0.5 * (1 - topic_similarity)
             elif self.use_weighted_emd:
-                emd_score += stance_emd * sim
+                emd_score += stance_dist * sim
             else:
-                emd_score += stance_emd
+                emd_score += stance_dist
             kept += 1 if not self.use_weighted_emd else sim
             kept_pairs += 1
 

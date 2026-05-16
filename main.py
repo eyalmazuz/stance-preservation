@@ -101,6 +101,13 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--emd-score-method",
+        type=str,
+        choices=["emd", "kl", "js", "argmax_ordinal", "argmax_exact"],
+        default="emd",
+        help="Which score method to use for EMD baseline.",
+    )
+    parser.add_argument(
         "--matching-model",
         type=str,
         default="intfloat/multilingual-e5-large-instruct",
@@ -210,6 +217,7 @@ def main():
             args.use_dist_topic_score,
             args.use_weighted_emd,
             args.debug,
+            args.emd_score_method,
         )
     else:
         raise ValueError("Not implemented yet")
