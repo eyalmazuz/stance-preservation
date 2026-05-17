@@ -185,6 +185,8 @@ class EMDScorer:
             )
 
         if kept == 0:
+            if self.score_method in ["kl", "js"]:
+                return -2.0
             return 0.0
             
         avg_dist = float(emd_score / kept)
