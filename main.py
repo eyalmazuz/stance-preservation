@@ -103,7 +103,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--emd-score-method",
         type=str,
-        choices=["emd", "kl", "js", "argmax_ordinal", "argmax_exact"],
+        choices=["emd", "kl", "js", "argmax_ordinal", "argmax_exact", "euclidean", "itakura"],
         default="emd",
         help="Which score method to use for EMD baseline.",
     )
