@@ -184,32 +184,32 @@ def get_english_prompt_template() -> str:
     dynamic_examples = [
         {
             "sentence": "The Ministry of Education will expand the educational gardens program so that all fourth-grade students will grow vegetables as part of science classes.",
-            "analysis": "This concerns the expansion of the educational gardens program in schools.",
+            # "analysis": "This concerns the expansion of the educational gardens program in schools.",
             "topic": "Educational gardens",
         },
         {
             "sentence": "An inspection conducted at the port found that delays in unloading containers are mainly caused by a shortage of truck drivers at night.",
-            "analysis": "This refers to the delays in unloading containers at the port.",
+            # "analysis": "This refers to the delays in unloading containers at the port.",
             "topic": "Unloading containers",
         },
         {
             "sentence": "Israeli developers presented a new chip that allows running artificial intelligence models on drones without a cloud connection.",
-            "analysis": "This is about a new chip developed for drones to run AI models.",
+            # "analysis": "This is about a new chip developed for drones to run AI models.",
             "topic": "Drone chips",
         },
         {
             "sentence": "The municipal library has opened a fast borrowing track that allows ordering books in the app and collecting them from a smart locker on the street.",
-            "analysis": "This concerns a new fast track for borrowing books from the library.",
+            # "analysis": "This concerns a new fast track for borrowing books from the library.",
             "topic": "Book borrowing",
         },
         {
             "sentence": "The Farmers' Association warns that a shortage of harvest workers is expected to lead to an increase in peach prices early in the season.",
-            "analysis": "This refers to the shortage of harvest workers and its effect on prices.",
+            # "analysis": "This refers to the shortage of harvest workers and its effect on prices.",
             "topic": "Harvest workers",
         },
         {
             "sentence": "A new initiative connects students with the elderly for weekly home visits and guidance on using digital services.",
-            "analysis": "This is about a new initiative providing digital assistance to the elderly.",
+            # "analysis": "This is about a new initiative providing digital assistance to the elderly.",
             "topic": "Digital assistance",
         },
     ]
@@ -240,7 +240,7 @@ def get_english_prompt_template() -> str:
     """
 
     examples_prompt = "\n".join(
-        f"Sentence: {example['sentence']}\nAnalysis: {example['analysis']}\nTopic: {example['topic']}"
+        f"Sentence: {example['sentence']}\nTopic: {example['topic']}"
         for example in dynamic_examples
     )
 
@@ -250,7 +250,7 @@ def get_english_prompt_template() -> str:
         + "{context}"
         + "\n\nExamples:\n"
         + examples_prompt
-        + "\n\nSentence: {sentence}\nAnalysis:\nTopic:"
+        + "\n\nSentence: {sentence}\nTopic:"
     ).strip()
 
     return final_prompt

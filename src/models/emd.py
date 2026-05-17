@@ -147,8 +147,8 @@ class EMDScorer:
                 stance_dist = F.kl_div(torch.log(hyp_stance_probs + 1e-9), ref_stance_probs, reduction="sum").item()
             elif self.score_method == "js":
                 m = 0.5 * (ref_stance_probs + hyp_stance_probs)
-                stance_dist = 0.5 * F.kl_div(torch.log(ref_stance_probs + 1e-9), m, reduction="sum").item() + \
-                              0.5 * F.kl_div(torch.log(hyp_stance_probs + 1e-9), m, reduction="sum").item()
+                stance_dist = 0.5 * F.kl_div(torch.log(m + 1e-9), ref_stance_probs, reduction="sum").item() + \
+                              0.5 * F.kl_div(torch.log(m + 1e-9), hyp_stance_probs, reduction="sum").item()
             elif self.score_method == "argmax_ordinal":
                 ref_label = self.canonical_labels[torch.argmax(ref_stance_probs).item()]
                 hyp_label = self.canonical_labels[torch.argmax(hyp_stance_probs).item()]
