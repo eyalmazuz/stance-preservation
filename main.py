@@ -156,6 +156,24 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help="Whether to filter pairs based on if the topic similarly match.",
     )
+    parser.add_argument(
+        "--soft-topic-token-jaccard",
+        type=float,
+        default=0.5,
+        help="Token Jaccard threshold for soft topic filtering.",
+    )
+    parser.add_argument(
+        "--soft-topic-char-jaccard",
+        type=float,
+        default=0.45,
+        help="Char Jaccard threshold for soft topic filtering.",
+    )
+    parser.add_argument(
+        "--soft-topic-fuzzy-ratio",
+        type=float,
+        default=0.82,
+        help="Fuzzy ratio threshold for soft topic filtering.",
+    )
     group.add_argument(
         "--use-dist-topic-score",
         action=argparse.BooleanOptionalAction,
@@ -214,6 +232,9 @@ def main():
             args.entropy_threshold,
             args.use_topic_filtering,
             args.use_soft_topic_filtering,
+            args.soft_topic_token_jaccard,
+            args.soft_topic_char_jaccard,
+            args.soft_topic_fuzzy_ratio,
             args.use_dist_topic_score,
             args.use_weighted_emd,
             args.debug,

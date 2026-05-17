@@ -44,6 +44,12 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_OUTPUT,
         help=f"Output PNG path. Default: {DEFAULT_OUTPUT}",
     )
+    parser.add_argument(
+        "--annotators",
+        nargs="*",
+        type=str,
+        help="Optional list of annotators to include in the heatmap. If not provided, all annotators are included.",
+    )
     return parser.parse_args()
 
 
@@ -131,8 +137,24 @@ def display_name(column: str, suffix: str) -> str:
 def collect_normalized_columns(
     df: pl.DataFrame,
     suffix: str,
+    annotators: list[str] | None = None,
 ) -> tuple[list[str], dict[str, list[str | None]]]:
-    columns = order_label_columns(find_label_columns(df.columns, suffix), suffix)
+    raw_columns = find_label_columns(df.columns, suffix)
+    
+    if annotators:
+        filtered_columns = []
+        for col in raw_columns:
+            if col == f"majority_{suffix}":
+                filtered_columns.append(col)
+                continue
+            
+            prefix = col[: -len(f"_{suffix}")]
+            if prefix in annotators:
+                filtered_columns.append(col)
+    else:
+        filtered_columns = raw_columns
+
+    columns = order_label_columns(filtered_columns, suffix)
     values: dict[str, list[str | None]] = {}
 
     for column in columns:
@@ -164,7 +186,7 @@ def suffix_title(suffix: str) -> str:
     return f"{area.capitalize()} {label_type.capitalize()}"
 
 
-def plot_heatmaps(df: pl.DataFrame, output_png: Path) -> None:
+def plot_heatmaps(df: pl.DataFrame, output_png: Path, annotators: list[str] | None = None) -> None:
     sns.set_theme(style="white", font_scale=0.9)
     fig, axes = plt.subplots(2, 2, figsize=(18, 14))
     axes_by_suffix = {
@@ -175,7 +197,7 @@ def plot_heatmaps(df: pl.DataFrame, output_png: Path) -> None:
     }
 
     for suffix, axis in axes_by_suffix.items():
-        ordered_columns, normalized_values = collect_normalized_columns(df, suffix)
+        ordered_columns, normalized_values = collect_normalized_columns(df, suffix, annotators)
         if not ordered_columns:
             raise ValueError(f"No columns found for suffix: {suffix}")
         matrix = build_kappa_matrix(ordered_columns, normalized_values)
@@ -210,8 +232,15 @@ def plot_heatmaps(df: pl.DataFrame, output_png: Path) -> None:
 
 def main() -> None:
     args = parse_args()
+    
+    annotators = None
+    if args.annotators:
+        annotators = []
+        for a in args.annotators:
+            annotators.extend([x.strip() for x in a.split(",") if x.strip()])
+            
     df = pl.read_csv(args.input_csv)
-    plot_heatmaps(df, args.output_png)
+    plot_heatmaps(df, args.output_png, annotators)
     print(f"Read {len(df)} rows from {args.input_csv}")
     print(f"Wrote heatmap to {args.output_png}")
 

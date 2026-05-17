@@ -47,6 +47,9 @@ class EMDScorer:
         entropy_threshold: float = 0.0,
         use_topic_filtering: bool = False,
         use_soft_topic_filtering: bool = False,
+        soft_topic_token_jaccard: float = 0.5,
+        soft_topic_char_jaccard: float = 0.45,
+        soft_topic_fuzzy_ratio: float = 0.82,
         use_dist_topic_score: bool = False,
         use_weighted_emd: bool = False,
         debug: bool = False,
@@ -63,6 +66,9 @@ class EMDScorer:
         self.canonical_labels = ["Against", "Neutral", "Favor"]
         self.use_topic_filtering = use_topic_filtering
         self.use_soft_topic_filtering = use_soft_topic_filtering
+        self.soft_topic_token_jaccard = soft_topic_token_jaccard
+        self.soft_topic_char_jaccard = soft_topic_char_jaccard
+        self.soft_topic_fuzzy_ratio = soft_topic_fuzzy_ratio
         self.use_dist_topic_score = use_dist_topic_score
         self.use_weighted_emd = use_weighted_emd
         self.debug = debug
@@ -106,7 +112,13 @@ class EMDScorer:
             ref_stance_probs = self.get_stance(ref_sentence, ref_topic)
 
             exact_topics_match = hyp_topic == ref_topic
-            soft_topics_match = topics_match_soft(hyp_topic, ref_topic)
+            soft_topics_match = topics_match_soft(
+                hyp_topic,
+                ref_topic,
+                token_jaccard_threshold=self.soft_topic_token_jaccard,
+                char_jaccard_threshold=self.soft_topic_char_jaccard,
+                fuzzy_ratio_threshold=self.soft_topic_fuzzy_ratio,
+            )
             exact_topic_matches += int(exact_topics_match)
             soft_topic_matches += int(soft_topics_match)
 

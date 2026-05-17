@@ -41,5 +41,15 @@ def fuzzy_ratio(a: str, b: str) -> float:
     return SequenceMatcher(None, norm_topic(a), norm_topic(b)).ratio()
 
 
-def topics_match_soft(a: str, b: str) -> bool:
-    return token_jaccard(a, b) >= 0.5 or char_jaccard(a, b, n=3) >= 0.45 or fuzzy_ratio(a, b) >= 0.82
+def topics_match_soft(
+    a: str,
+    b: str,
+    token_jaccard_threshold: float = 0.5,
+    char_jaccard_threshold: float = 0.45,
+    fuzzy_ratio_threshold: float = 0.82,
+) -> bool:
+    return (
+        token_jaccard(a, b) >= token_jaccard_threshold
+        or char_jaccard(a, b, n=3) >= char_jaccard_threshold
+        or fuzzy_ratio(a, b) >= fuzzy_ratio_threshold
+    )
