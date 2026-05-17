@@ -186,7 +186,17 @@ class EMDScorer:
 
         if kept == 0:
             return 0.0
-        return 2.0 - (emd_score / kept)
+            
+        avg_dist = float(emd_score / kept)
+        
+        if self.score_method in ["emd", "argmax_ordinal"]:
+            return 2.0 - avg_dist
+        elif self.score_method == "argmax_exact":
+            return 1.0 - avg_dist
+        elif self.score_method in ["kl", "js"]:
+            return -avg_dist
+            
+        return 2.0 - avg_dist
 
     def print_filter_summary(self) -> None:
         if not self.debug or not (self.use_topic_filtering or self.use_soft_topic_filtering) or not self.filter_stats:
