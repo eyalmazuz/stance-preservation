@@ -155,6 +155,12 @@ class EMDScorer:
                 stance_dist = float(abs(self.stance_value[ref_label] - self.stance_value[hyp_label]))
             elif self.score_method == "argmax_exact":
                 stance_dist = 0.0 if torch.argmax(ref_stance_probs).item() == torch.argmax(hyp_stance_probs).item() else 1.0
+            elif self.score_method == "euclidean":
+                stance_dist = torch.sum((ref_stance_probs - hyp_stance_probs) ** 2).item()
+            elif self.score_method == "itakura":
+                p = ref_stance_probs + 1e-9
+                q = hyp_stance_probs + 1e-9
+                stance_dist = torch.sum(p / q - torch.log(p / q) - 1).item()
             else:
                 raise ValueError(f"Invalid score method: {self.score_method}")
 
