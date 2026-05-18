@@ -412,13 +412,3 @@ class EMDScorer:
         if "_" in label_key:
             label_key = label_key.rsplit("_", maxsplit=1)[-1]
         return cls.LABEL_ALIASES.get(label_key)
-[index] = label
-
-        return [labels_by_index[index] for index in sorted(labels_by_index)]
-
-    @classmethod
-    def normalize_stance_label(cls, label: str) -> str | None:
-        label_key = label.strip().replace("-", "_").replace(" ", "_").upper()
-        if "_" in label_key:
-            label_key = label_key.rsplit("_", maxsplit=1)[-1]
-        return cls.LABEL_ALIASES.get(label_key)
