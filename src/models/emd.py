@@ -56,11 +56,15 @@ class EMDScorer:
         score_method: str = "emd",
         divide_by_sentence_count: bool = False,
         penalize_filtered_pairs: bool = False,
+        use_gold_topics: bool = False,
     ) -> None:
         self.matching_model = self.get_matching_model(matching_model_name)
         self.matching_model_name = matching_model_name
         self.topic_model_name = topic_model_name
-        self.topic_model, self.topic_tokenizer = self.get_topic_model(topic_model_name)
+        self.use_gold_topics = use_gold_topics
+        self.topic_model, self.topic_tokenizer = (
+            (None, None) if use_gold_topics else self.get_topic_model(topic_model_name)
+        )
         self.stance_model, self.stance_tokenizer = self.get_stance_model(stance_model_name)
         self.aggregate = aggregate
         self.language = language
@@ -91,13 +95,21 @@ class EMDScorer:
         emd_score: float = 0.0
 
         if isinstance(hypotheses, str) and isinstance(references, str):
+            if self.use_gold_topics:
+                raise ValueError("Gold EMD topics require sentence-level inputs with topic fields.")
             hyp_sentences: list[str] = split_into_sentences(hypotheses)
             ref_sentences: list[str] = split_into_sentences(references)
-            matched_pairs = self.get_matching_pairs(hyp_sentences, ref_sentences)
+            matched_pairs = [
+                (hyp_sentence, ref_sentence, sim, None, None)
+                for hyp_sentence, ref_sentence, sim in self.get_matching_pairs(hyp_sentences, ref_sentences)
+            ]
             full_hyp = hypotheses
             full_ref = references
         elif isinstance(hypotheses, list) and isinstance(references, list):
-            matched_pairs = [(hyp["text"], ref["text"], 1.0) for hyp, ref in zip(hypotheses, references, strict=True)]
+            matched_pairs = [
+                (hyp["text"], ref["text"], 1.0, hyp.get("topic"), ref.get("topic"))
+                for hyp, ref in zip(hypotheses, references, strict=True)
+            ]
             full_hyp = hypotheses[0]["full_text"]
             full_ref = references[0]["full_text"]
 
@@ -108,9 +120,15 @@ class EMDScorer:
         soft_topic_matches = 0
         skipped_topic = 0
         skipped_entropy = 0
-        for hyp_sentence, ref_sentence, sim in tqdm(matched_pairs, leave=False):
-            hyp_topic = self.get_topic(full_hyp, hyp_sentence)
-            ref_topic = self.get_topic(full_ref, ref_sentence)
+        for hyp_sentence, ref_sentence, sim, hyp_gold_topic, ref_gold_topic in tqdm(matched_pairs, leave=False):
+            if self.use_gold_topics:
+                if hyp_gold_topic is None or ref_gold_topic is None:
+                    raise ValueError("Gold EMD topics require topic fields on both hypothesis and reference data.")
+                hyp_topic = str(hyp_gold_topic)
+                ref_topic = str(ref_gold_topic)
+            else:
+                hyp_topic = self.get_topic(full_hyp, hyp_sentence)
+                ref_topic = self.get_topic(full_ref, ref_sentence)
 
             hyp_stance_probs = self.get_stance(hyp_sentence, hyp_topic)
             ref_stance_probs = self.get_stance(ref_sentence, ref_topic)
@@ -322,6 +340,8 @@ class EMDScorer:
         return self.matching_model.encode(texts, convert_to_tensor=True, normalize_embeddings=True)
 
     def get_topic(self, full_text: str, sentence: str) -> str:
+        if self.use_gold_topics:
+            raise ValueError("Topic generation is disabled when using gold EMD topics.")
         prompt = get_emd_prompt(self.language).format(context=full_text, sentence=sentence)
 
         if self.should_use_topic_chat_template():

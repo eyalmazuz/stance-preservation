@@ -204,6 +204,14 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help="Whether to count filtered EMD pairs as maximum divergence and divide by the number of sentences.",
     )
+    parser.add_argument(
+        "--use-gold-emd-topics",
+        "--use-gold-topics",
+        dest="use_gold_emd_topics",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Use dataset topic labels for EMD instead of generating topics with the topic model.",
+    )
     args = parser.parse_args()
     if args.use_topic_filtering and args.use_topic_mismatch_filtering:
         parser.error("--use-topic-filtering and --use-topic-mismatch-filtering are mutually exclusive.")
@@ -215,6 +223,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--use-hebrew-morph-normalization is supported only with --language he.")
     if args.penalize_filtered_emd and args.emd_score_method in {"kl", "itakura"}:
         parser.error("--penalize-filtered-emd is not defined for --emd-score-method kl or itakura.")
+    if args.use_gold_emd_topics and args.model != "emd":
+        parser.error("--use-gold-emd-topics is supported only with --model emd.")
     return args
 
 
@@ -265,6 +275,7 @@ def main():
             args.emd_score_method,
             args.divide_emd_by_sentence_count,
             args.penalize_filtered_emd,
+            args.use_gold_emd_topics,
         )
     else:
         raise ValueError("Not implemented yet")
@@ -274,7 +285,12 @@ def main():
 
     data = process_data(df, args.label_prefix, args.score_method)
     for pair in tqdm(data):
-        if args.aggregate_level == "sentence" or args.model == "nli" or bleu_topic_diagnostic:
+        if (
+            args.aggregate_level == "sentence"
+            or args.model == "nli"
+            or bleu_topic_diagnostic
+            or (args.model == "emd" and args.use_gold_emd_topics)
+        ):
             hypotheses = pair.summary_data
             references = pair.article_data
         else:
