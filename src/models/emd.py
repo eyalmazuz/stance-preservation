@@ -55,6 +55,7 @@ class EMDScorer:
         debug: bool = False,
         score_method: str = "emd",
         divide_by_sentence_count: bool = False,
+        penalize_filtered_pairs: bool = False,
     ) -> None:
         self.matching_model = self.get_matching_model(matching_model_name)
         self.matching_model_name = matching_model_name
@@ -75,6 +76,7 @@ class EMDScorer:
         self.debug = debug
         self.score_method = score_method
         self.divide_by_sentence_count = divide_by_sentence_count
+        self.penalize_filtered_pairs = penalize_filtered_pairs
         self.filter_stats: list[dict[str, float]] = []
         self.stance_value = {"Against": -1, "Neutral": 0, "Favor": 1}
         self.C = np.array(
@@ -133,10 +135,14 @@ class EMDScorer:
 
             if topic_filtered:
                 skipped_topic += 1
+                if self.penalize_filtered_pairs:
+                    emd_score += self.filtered_pair_penalty()
                 continue
 
             if entropy_filtered:
                 skipped_entropy += 1
+                if self.penalize_filtered_pairs:
+                    emd_score += self.filtered_pair_penalty()
                 continue
 
             if self.score_method == "emd":
@@ -192,7 +198,7 @@ class EMDScorer:
                 }
             )
 
-        denominator = float(total_pairs) if self.divide_by_sentence_count else kept
+        denominator = float(total_pairs) if self.divide_by_sentence_count or self.penalize_filtered_pairs else kept
 
         if denominator == 0:
             if self.score_method in ["kl", "js", "euclidean", "itakura"]:
@@ -209,6 +215,17 @@ class EMDScorer:
             return -avg_dist
 
         return 2.0 - avg_dist
+
+    def filtered_pair_penalty(self) -> float:
+        if self.score_method in ["emd", "argmax_ordinal"]:
+            return 2.0
+        if self.score_method == "argmax_exact":
+            return 1.0
+        if self.score_method == "js":
+            return float(np.log(2.0))
+        if self.score_method == "euclidean":
+            return 2.0
+        raise ValueError(f"Filtered-pair penalty is not defined for score method: {self.score_method}")
 
     def print_filter_summary(self) -> None:
         if not self.debug or not (self.use_topic_filtering or self.use_soft_topic_filtering) or not self.filter_stats:

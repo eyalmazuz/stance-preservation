@@ -198,6 +198,12 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help="Whether to divide the EMD distance by the number of sentences instead of kept pairs.",
     )
+    parser.add_argument(
+        "--penalize-filtered-emd",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Whether to count filtered EMD pairs as maximum divergence and divide by the number of sentences.",
+    )
     args = parser.parse_args()
     if args.use_topic_filtering and args.use_topic_mismatch_filtering:
         parser.error("--use-topic-filtering and --use-topic-mismatch-filtering are mutually exclusive.")
@@ -207,6 +213,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--use-hebrew-morph-normalization is supported only with BLEU and ROUGE models.")
     if args.use_hebrew_morph_normalization and args.language != "he":
         parser.error("--use-hebrew-morph-normalization is supported only with --language he.")
+    if args.penalize_filtered_emd and args.emd_score_method in {"kl", "itakura"}:
+        parser.error("--penalize-filtered-emd is not defined for --emd-score-method kl or itakura.")
     return args
 
 
@@ -256,6 +264,7 @@ def main():
             args.debug,
             args.emd_score_method,
             args.divide_emd_by_sentence_count,
+            args.penalize_filtered_emd,
         )
     else:
         raise ValueError("Not implemented yet")
