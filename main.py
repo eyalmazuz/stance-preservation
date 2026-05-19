@@ -144,6 +144,12 @@ def parse_args() -> argparse.Namespace:
         help="Whether to filter BLEU pairs to gold topic mismatches only.",
     )
     parser.add_argument(
+        "--use-hebrew-morph-normalization",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Apply lightweight Hebrew normalization and proclitic splitting before BLEU/ROUGE scoring.",
+    )
+    parser.add_argument(
         "--debug",
         action=argparse.BooleanOptionalAction,
         default=False,
@@ -186,11 +192,21 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help="Whether to weight the EMD score by the cosine sim.",
     )
+    parser.add_argument(
+        "--divide-emd-by-sentence-count",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Whether to divide the EMD distance by the number of sentences instead of kept pairs.",
+    )
     args = parser.parse_args()
     if args.use_topic_filtering and args.use_topic_mismatch_filtering:
         parser.error("--use-topic-filtering and --use-topic-mismatch-filtering are mutually exclusive.")
     if args.use_topic_mismatch_filtering and args.model != "bleu":
         parser.error("--use-topic-mismatch-filtering is currently supported only with --model bleu.")
+    if args.use_hebrew_morph_normalization and args.model not in {"bleu", "rouge1", "rouge2", "rougeL"}:
+        parser.error("--use-hebrew-morph-normalization is supported only with BLEU and ROUGE models.")
+    if args.use_hebrew_morph_normalization and args.language != "he":
+        parser.error("--use-hebrew-morph-normalization is supported only with --language he.")
     return args
 
 
@@ -206,9 +222,9 @@ def main():
             bleu_topic_filter = "match"
         elif args.use_topic_mismatch_filtering:
             bleu_topic_filter = "mismatch"
-        scorer = BleuScorer(topic_filter=bleu_topic_filter)
+        scorer = BleuScorer(topic_filter=bleu_topic_filter, normalize_hebrew=args.use_hebrew_morph_normalization)
     elif args.model.startswith("rouge"):
-        scorer = RougeScorer(args.model)
+        scorer = RougeScorer(args.model, normalize_hebrew=args.use_hebrew_morph_normalization)
     elif args.model == "tf-idf":
         scorer = TfIdfScorer()
     elif args.model == "emb":
@@ -239,6 +255,7 @@ def main():
             args.use_weighted_emd,
             args.debug,
             args.emd_score_method,
+            args.divide_emd_by_sentence_count,
         )
     else:
         raise ValueError("Not implemented yet")
@@ -279,6 +296,8 @@ def main():
         pred_col = f"{args.model}_preds"
         if args.model == "nli":
             pred_col = f"nli_{args.nli_score_method}_preds"
+        elif args.use_hebrew_morph_normalization:
+            pred_col = f"{args.model}_hebrew_morph_preds"
         pred_df = pl.from_dict(
             {
                 "article": [pair.article for pair in data],

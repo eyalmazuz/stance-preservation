@@ -114,3 +114,6 @@ docstring-code-line-length = "dynamic"
 
 [tool.ruff.lint.isort]
 lines-between-types = 1
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

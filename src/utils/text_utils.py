@@ -2,6 +2,37 @@ import re
 
 from difflib import SequenceMatcher
 
+HEBREW_NIQQUD_RE = re.compile(r"[\u0591-\u05c7]")
+HEBREW_TOKEN_RE = re.compile(r"^[\u0590-\u05ff]+$")
+LEXICAL_TOKEN_RE = re.compile(r"[\u0590-\u05ff]+|[A-Za-z0-9]+")
+HEBREW_FINAL_LETTERS = str.maketrans(
+    {
+        "\u05da": "\u05db",
+        "\u05dd": "\u05de",
+        "\u05df": "\u05e0",
+        "\u05e3": "\u05e4",
+        "\u05e5": "\u05e6",
+    }
+)
+HEBREW_PROCLITICS = (
+    "\u05d5\u05db\u05e9",
+    "\u05d5\u05e9\u05d4",
+    "\u05e9\u05d1",
+    "\u05e9\u05d4",
+    "\u05db\u05e9",
+    "\u05d5\u05d4",
+    "\u05d5\u05d1",
+    "\u05d5\u05dc",
+    "\u05d5\u05de",
+    "\u05d1",
+    "\u05dc",
+    "\u05db",
+    "\u05de",
+    "\u05d4",
+    "\u05d5",
+    "\u05e9",
+)
+
 
 def norm_topic(s: str) -> str:
     s = s.strip().lower()
@@ -53,3 +84,25 @@ def topics_match_soft(
         or char_jaccard(a, b, n=3) >= char_jaccard_threshold
         or fuzzy_ratio(a, b) >= fuzzy_ratio_threshold
     )
+
+
+def normalize_hebrew_token(token: str) -> list[str]:
+    token = HEBREW_NIQQUD_RE.sub("", token).translate(HEBREW_FINAL_LETTERS)
+    if not token:
+        return []
+    if not HEBREW_TOKEN_RE.fullmatch(token) or len(token) <= 3:
+        return [token.lower()]
+
+    for prefix in HEBREW_PROCLITICS:
+        stem = token[len(prefix) :]
+        if token.startswith(prefix) and len(stem) >= 3:
+            return [prefix, stem]
+
+    return [token]
+
+
+def hebrew_morph_normalize(text: str) -> str:
+    normalized_tokens: list[str] = []
+    for token in LEXICAL_TOKEN_RE.findall(text):
+        normalized_tokens.extend(normalize_hebrew_token(token))
+    return " ".join(normalized_tokens)

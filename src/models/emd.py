@@ -54,6 +54,7 @@ class EMDScorer:
         use_weighted_emd: bool = False,
         debug: bool = False,
         score_method: str = "emd",
+        divide_by_sentence_count: bool = False,
     ) -> None:
         self.matching_model = self.get_matching_model(matching_model_name)
         self.matching_model_name = matching_model_name
@@ -73,6 +74,7 @@ class EMDScorer:
         self.use_weighted_emd = use_weighted_emd
         self.debug = debug
         self.score_method = score_method
+        self.divide_by_sentence_count = divide_by_sentence_count
         self.filter_stats: list[dict[str, float]] = []
         self.stance_value = {"Against": -1, "Neutral": 0, "Favor": 1}
         self.C = np.array(
@@ -190,20 +192,22 @@ class EMDScorer:
                 }
             )
 
-        if kept == 0:
+        denominator = float(total_pairs) if self.divide_by_sentence_count else kept
+
+        if denominator == 0:
             if self.score_method in ["kl", "js", "euclidean", "itakura"]:
                 return -2.0
             return 0.0
-            
-        avg_dist = float(emd_score / kept)
-        
+
+        avg_dist = float(emd_score / denominator)
+
         if self.score_method in ["emd", "argmax_ordinal"]:
             return 2.0 - avg_dist
         elif self.score_method == "argmax_exact":
             return 1.0 - avg_dist
         elif self.score_method in ["kl", "js", "euclidean", "itakura"]:
             return -avg_dist
-            
+
         return 2.0 - avg_dist
 
     def print_filter_summary(self) -> None:
