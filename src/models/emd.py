@@ -58,6 +58,10 @@ class EMDScorer:
         penalize_filtered_pairs: bool = False,
         use_gold_topics: bool = False,
     ) -> None:
+        self.model_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model_dtype = (
+            torch.bfloat16 if self.model_device.type == "cuda" and torch.cuda.is_bf16_supported() else torch.float16
+        )
         self.matching_model = self.get_matching_model(matching_model_name)
         self.matching_model_name = matching_model_name
         self.topic_model_name = topic_model_name
@@ -173,14 +177,18 @@ class EMDScorer:
                 stance_dist = F.kl_div(torch.log(hyp_stance_probs + 1e-9), ref_stance_probs, reduction="sum").item()
             elif self.score_method == "js":
                 m = 0.5 * (ref_stance_probs + hyp_stance_probs)
-                stance_dist = 0.5 * F.kl_div(torch.log(m + 1e-9), ref_stance_probs, reduction="sum").item() + \
-                              0.5 * F.kl_div(torch.log(m + 1e-9), hyp_stance_probs, reduction="sum").item()
+                stance_dist = (
+                    0.5 * F.kl_div(torch.log(m + 1e-9), ref_stance_probs, reduction="sum").item()
+                    + 0.5 * F.kl_div(torch.log(m + 1e-9), hyp_stance_probs, reduction="sum").item()
+                )
             elif self.score_method == "argmax_ordinal":
                 ref_label = self.canonical_labels[torch.argmax(ref_stance_probs).item()]
                 hyp_label = self.canonical_labels[torch.argmax(hyp_stance_probs).item()]
                 stance_dist = float(abs(self.stance_value[ref_label] - self.stance_value[hyp_label]))
             elif self.score_method == "argmax_exact":
-                stance_dist = 0.0 if torch.argmax(ref_stance_probs).item() == torch.argmax(hyp_stance_probs).item() else 1.0
+                stance_dist = (
+                    0.0 if torch.argmax(ref_stance_probs).item() == torch.argmax(hyp_stance_probs).item() else 1.0
+                )
             elif self.score_method == "euclidean":
                 stance_dist = torch.sum((ref_stance_probs - hyp_stance_probs) ** 2).item()
             elif self.score_method == "itakura":
@@ -280,16 +288,19 @@ class EMDScorer:
         return model
 
     def get_topic_model(self, model_name: str):
+        if self.model_device.type != "cuda":
+            raise RuntimeError("EMD topic model inference requires CUDA for 4-bit quantized loading.")
+
         quant_config = BitsAndBytesConfig(
             load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_compute_dtype=self.model_dtype,
             bnb_4bit_use_double_quant=True,
             bnb_4bit_quant_type="nf4",
         )
 
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            device_map="cuda",
+            device_map=self.model_device.type,
             quantization_config=quant_config,
         )
         tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -299,12 +310,17 @@ class EMDScorer:
         return model, tokenizer
 
     def get_stance_model(self, model_name: str):
-        model = AutoModelForSequenceClassification.from_pretrained(model_name)
+        model_kwargs = {}
+        if self.model_device.type == "cuda":
+            model_kwargs["torch_dtype"] = self.model_dtype
+
+        model = AutoModelForSequenceClassification.from_pretrained(model_name, **model_kwargs)
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         if tokenizer.pad_token is None and tokenizer.eos_token is not None:
             tokenizer.pad_token = tokenizer.eos_token
         if model.config.pad_token_id is None and tokenizer.pad_token_id is not None:
             model.config.pad_token_id = tokenizer.pad_token_id
+        model.to(self.model_device)
         model.eval()
 
         return model, tokenizer
