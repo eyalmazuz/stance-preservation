@@ -199,7 +199,14 @@ graph TD
    - **Topic Matching**: Filters out sentence pairs where generated topics do not match (either hard matching, or soft matching based on character/token Jaccard and SequenceMatcher fuzzy similarity).
    - **Entropy Threshold**: Skips pairs where stance classification is highly uncertain (entropy above `--entropy-threshold`).
 5. **Distance Computations**: Calculates distance between the stance probability distributions using Earth Mover's Distance (`ot.emd2` from Python Optimal Transport), Kullback-Leibler (KL), Jensen-Shannon (JS), Euclidean, Itakura-Saito, or Argmax ordinal/exact matches. EMD uses a cost matrix representing ordinal distances:
-   $$C = \begin{pmatrix} 0 & 1 & 2 \\ 1 & 0 & 1 \\ 2 & 1 & 0 \end{pmatrix}$$
+   $$C = \begin{pmatrix} 0 & 1 & 2 \\\\ 1 & 0 & 1 \\\\ 2 & 1 & 0 \end{pmatrix}$$
+
+   Or represented as a cost table:
+   | Stance | Against | Neutral | Favor |
+   |---|---|---|---|
+   | **Against** | 0 | 1 | 2 |
+   | **Neutral** | 1 | 0 | 1 |
+   | **Favor** | 2 | 1 | 0 |
 6. **Divergence Penalty**: Skipped or filtered pairs can be penalized with maximum stance divergence using `--penalize-filtered-emd`.
 
 ---
