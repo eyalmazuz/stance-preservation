@@ -65,7 +65,7 @@ source .venv/bin/activate
 ```
 
 #### Option B: Using `pip`
-Create a virtual environment and install packages from [pyproject.toml](file:///home/eyalm/Desktop/university/research/stance-preservation/pyproject.toml):
+Create a virtual environment and install packages from [pyproject.toml](pyproject.toml):
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
@@ -86,7 +86,7 @@ GEMINI_API_KEY=your_gemini_api_key
 
 ## Data & Annotation Pipeline
 
-The datasets reside in the [data/datasets/](file:///home/eyalm/Desktop/university/research/stance-preservation/data/datasets) directory.
+The datasets reside in the [data/datasets/](data/datasets) directory.
 - `english_data.csv` / `hebrew_data.csv`: Raw article-summary pairings.
 - `english_data_labeled.csv` / `hebrew_data_labeled.csv`: Datasets containing individual human and LLM annotations.
 - `english_normalized_majority.csv` / `hebrew_normalized_majority.csv`: Dataset with aggregated majority vote labels.
@@ -112,7 +112,7 @@ python scripts/stance_annotator_gui.py
 - **Save File**: Exports annotations directly back to the CSV.
 
 ### Automated LLM Labeling (Batch APIs)
-To scale up labeling, we provide scripts that leverage the Gemini and GPT Batch APIs. They load prompts from [data/prompts/](file:///home/eyalm/Desktop/university/research/stance-preservation/data/prompts) and return structured JSON responses containing topics and stances.
+To scale up labeling, we provide scripts that leverage the Gemini and GPT Batch APIs. They load prompts from [data/prompts/](data/prompts) and return structured JSON responses containing topics and stances.
 
 #### Gemini Batch Labeling
 Uses the new `google-genai` SDK and Gemini's Batch API to upload input, run batch inference, download, and parse responses:
@@ -136,7 +136,7 @@ python scripts/gpt_labeling.py \
 ```
 
 ### Majority Voting & Reconciliation
-Since different annotators (human and LLM) label topics and stances, we compute standard majority ground-truths using [scripts/calculate_majority.py](file:///home/eyalm/Desktop/university/research/stance-preservation/scripts/calculate_majority.py):
+Since different annotators (human and LLM) label topics and stances, we compute standard majority ground-truths using [scripts/calculate_majority.py](scripts/calculate_majority.py):
 ```bash
 python scripts/calculate_majority.py \
   data/datasets/hebrew_data_labeled.csv \
@@ -156,29 +156,29 @@ python scripts/calculate_majority.py \
 
 ## Stance Preservation Metric Scorers
 
-The evaluation pipeline is orchestrated by [main.py](file:///home/eyalm/Desktop/university/research/stance-preservation/main.py) which loads a scorer class from [src/models/](file:///home/eyalm/Desktop/university/research/stance-preservation/src/models) and correlates its scores with ground truth labels.
+The evaluation pipeline is orchestrated by [main.py](main.py) which loads a scorer class from [src/models/](src/models) and correlates its scores with ground truth labels.
 
 ### Lexical & Overlap Metrics
-- **BLEU ([src/models/bleu.py](file:///home/eyalm/Desktop/university/research/stance-preservation/src/models/bleu.py))**: Computes sentence BLEU.
+- **BLEU ([src/models/bleu.py](src/models/bleu.py))**: Computes sentence BLEU.
   - `--use-hebrew-morph-normalization`: Splits proclitics and removes niqqud to normalize Hebrew before scoring.
   - `--use-topic-filtering` / `--use-topic-mismatch-filtering`: Filters BLEU pairs to same-topic or different-topic alignments.
-- **ROUGE ([src/models/rouge.py](file:///home/eyalm/Desktop/university/research/stance-preservation/src/models/rouge.py))**: Computes F-measures for ROUGE-1, ROUGE-2, and ROUGE-L.
-- **TF-IDF ([src/models/tf_idf.py](file:///home/eyalm/Desktop/university/research/stance-preservation/src/models/tf_idf.py))**: Char n-gram (3-to-5) cosine similarity.
+- **ROUGE ([src/models/rouge.py](src/models/rouge.py))**: Computes F-measures for ROUGE-1, ROUGE-2, and ROUGE-L.
+- **TF-IDF ([src/models/tf_idf.py](src/models/tf_idf.py))**: Char n-gram (3-to-5) cosine similarity.
 
 ### Semantic Embedding Similarity
-- **Embedding Scorer ([src/models/emb.py](file:///home/eyalm/Desktop/university/research/stance-preservation/src/models/emb.py))**: Generates OpenAI embeddings (default: `text-embedding-3-large`) for summary and article texts, computing their cosine similarity.
+- **Embedding Scorer ([src/models/emb.py](src/models/emb.py))**: Generates OpenAI embeddings (default: `text-embedding-3-large`) for summary and article texts, computing their cosine similarity.
 
 ### Direct LLM Rating
-- **LLM Scorer ([src/models/llm.py](file:///home/eyalm/Desktop/university/research/stance-preservation/src/models/llm.py))**: Prompts an LLM (default: `gpt-5-mini-2025-08-07`) using [data/prompts/prediction_prompt.txt](file:///home/eyalm/Desktop/university/research/stance-preservation/data/prompts/prediction_prompt.txt) to rate stance preservation directly on a scale of 0 to 10. The score is normalized to `[0.0, 1.0]`.
+- **LLM Scorer ([src/models/llm.py](src/models/llm.py))**: Prompts an LLM (default: `gpt-5-mini-2025-08-07`) using [data/prompts/prediction_prompt.txt](data/prompts/prediction_prompt.txt) to rate stance preservation directly on a scale of 0 to 10. The score is normalized to `[0.0, 1.0]`.
 
 ### Natural Language Inference (NLI) Stance-Shift
-- **NLI Scorer ([src/models/nli.py](file:///home/eyalm/Desktop/university/research/stance-preservation/src/models/nli.py))**: Runs a zero-shot classification pipeline (default: `joeddav/xlm-roberta-large-xnli`) with dynamic templates (in English or Hebrew) to classify text into `Favor`, `Against`, or `Neutral` toward the topic. It calculates expected stance values:
+- **NLI Scorer ([src/models/nli.py](src/models/nli.py))**: Runs a zero-shot classification pipeline (default: `joeddav/xlm-roberta-large-xnli`) with dynamic templates (in English or Hebrew) to classify text into `Favor`, `Against`, or `Neutral` toward the topic. It calculates expected stance values:
   $$\text{Expected Stance} = P(\text{Favor}) - P(\text{Against})$$
   The score is computed either as the signed stance shift or absolute preservation:
   $$\text{Preservation Score} = 1 - \frac{|\text{Expected Stance}_{\text{summary}} - \text{Expected Stance}_{\text{article}}|}{2}$$
 
 ### Earth Mover's Distance (EMD) Stance Scorer
-The EMD Scorer ([src/models/emd.py](file:///home/eyalm/Desktop/university/research/stance-preservation/src/models/emd.py)) is the primary contribution. It measures stance preservation at a distribution level:
+The EMD Scorer ([src/models/emd.py](src/models/emd.py)) is the primary contribution. It measures stance preservation at a distribution level:
 
 ```mermaid
 graph TD
@@ -233,7 +233,7 @@ To run all baseline evaluations (BLEU, ROUGE-1/2/L, TF-IDF, embeddings, LLM, NLI
 ```bash
 bash scripts/run_all_baselines.sh
 ```
-This script writes summary outputs to [results/all_baselines_article.txt](file:///home/eyalm/Desktop/university/research/stance-preservation/results/all_baselines_article.txt) and [results/all_baselines_sentence.txt](file:///home/eyalm/Desktop/university/research/stance-preservation/results/all_baselines_sentence.txt).
+This script writes summary outputs to [results/all_baselines_article.txt](results/all_baselines_article.txt) and [results/all_baselines_sentence.txt](results/all_baselines_sentence.txt).
 
 ### EMD Distance Ablation Study
 To run the EMD pipeline, specify `--model emd`. You must have a GPU environment config to load the topic and stance classification models.
@@ -283,7 +283,7 @@ python main.py \
   --emd-score-method kl \
   --label-prefix majority
 ```
-*(Similarly replace `--emd-score-method` with `js`, `argmax_ordinal`, `argmax_exact`, `euclidean`, or `itakura` to replicate results in [results/dist_ablation.txt](file:///home/eyalm/Desktop/university/research/stance-preservation/results/dist_ablation.txt).)*
+*(Similarly replace `--emd-score-method` with `js`, `argmax_ordinal`, `argmax_exact`, `euclidean`, or `itakura` to replicate results in [results/dist_ablation.txt](results/dist_ablation.txt).)*
 
 ### Inter-Annotator Agreement Heatmaps
 Generate a 2x2 grid plot of Cohen's Kappa agreements between all annotators (human and LLM) and write it to `figures/`:
