@@ -132,6 +132,7 @@ class EMDScorer:
         skipped_topic = 0
         skipped_entropy = 0
         for hyp_sentence, ref_sentence, sim, hyp_gold_topic, ref_gold_topic in tqdm(matched_pairs, leave=False):
+            pair_weight = sim if self.use_weighted_emd else 1.0
             if self.use_gold_topics:
                 if hyp_gold_topic is None or ref_gold_topic is None:
                     raise ValueError("Gold EMD topics require topic fields on both hypothesis and reference data.")
@@ -173,13 +174,15 @@ class EMDScorer:
             if topic_filtered:
                 skipped_topic += 1
                 if self.penalize_filtered_pairs:
-                    emd_score += self.filtered_pair_penalty()
+                    emd_score += self.filtered_pair_penalty() * pair_weight
+                    kept += pair_weight
                 continue
 
             if entropy_filtered:
                 skipped_entropy += 1
                 if self.penalize_filtered_pairs:
-                    emd_score += self.filtered_pair_penalty()
+                    emd_score += self.filtered_pair_penalty() * pair_weight
+                    kept += pair_weight
                 continue
 
             if self.score_method == "emd":
@@ -217,10 +220,10 @@ class EMDScorer:
                 topic_similarity = self.get_topic_similarity(hyp_topic, ref_topic, use_matching_prompt=False)
                 emd_score += stance_dist + 0.5 * (1 - topic_similarity)
             elif self.use_weighted_emd:
-                emd_score += stance_dist * sim
+                emd_score += stance_dist * pair_weight
             else:
                 emd_score += stance_dist
-            kept += 1 if not self.use_weighted_emd else sim
+            kept += pair_weight
             kept_pairs += 1
 
         if self.debug and (
@@ -243,7 +246,7 @@ class EMDScorer:
                 }
             )
 
-        denominator = float(total_pairs) if self.divide_by_sentence_count or self.penalize_filtered_pairs else kept
+        denominator = float(total_pairs) if self.divide_by_sentence_count else kept
 
         if denominator == 0:
             if self.score_method in ["kl", "js", "euclidean", "itakura"]:
