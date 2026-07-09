@@ -181,6 +181,20 @@ def parse_args() -> argparse.Namespace:
         help="Fuzzy ratio threshold for soft topic filtering.",
     )
     group.add_argument(
+        "--use-embedding-topic-filtering",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Whether to filter pairs based on embedding similarity between topics.",
+    )
+    parser.add_argument(
+        "--embedding-topic-threshold",
+        "--embedding-topic-similarity-threshold",
+        dest="embedding_topic_threshold",
+        type=float,
+        default=EMDScorer.DEFAULT_EMBEDDING_TOPIC_THRESHOLD,
+        help="Topic embedding similarity threshold for embedding topic filtering.",
+    )
+    group.add_argument(
         "--use-dist-topic-score",
         action=argparse.BooleanOptionalAction,
         default=False,
@@ -258,24 +272,26 @@ def main():
         )
     elif args.model == "emd":
         scorer = EMDScorer(
-            args.matching_model,
-            args.topic_model,
-            args.stance_model,
-            args.aggregate_level,
-            args.language,
-            args.entropy_threshold,
-            args.use_topic_filtering,
-            args.use_soft_topic_filtering,
-            args.soft_topic_token_jaccard,
-            args.soft_topic_char_jaccard,
-            args.soft_topic_fuzzy_ratio,
-            args.use_dist_topic_score,
-            args.use_weighted_emd,
-            args.debug,
-            args.emd_score_method,
-            args.divide_emd_by_sentence_count,
-            args.penalize_filtered_emd,
-            args.use_gold_emd_topics,
+            matching_model_name=args.matching_model,
+            topic_model_name=args.topic_model,
+            stance_model_name=args.stance_model,
+            aggregate=args.aggregate_level,
+            language=args.language,
+            entropy_threshold=args.entropy_threshold,
+            use_topic_filtering=args.use_topic_filtering,
+            use_soft_topic_filtering=args.use_soft_topic_filtering,
+            soft_topic_token_jaccard=args.soft_topic_token_jaccard,
+            soft_topic_char_jaccard=args.soft_topic_char_jaccard,
+            soft_topic_fuzzy_ratio=args.soft_topic_fuzzy_ratio,
+            use_embedding_topic_filtering=args.use_embedding_topic_filtering,
+            embedding_topic_threshold=args.embedding_topic_threshold,
+            use_dist_topic_score=args.use_dist_topic_score,
+            use_weighted_emd=args.use_weighted_emd,
+            debug=args.debug,
+            score_method=args.emd_score_method,
+            divide_by_sentence_count=args.divide_emd_by_sentence_count,
+            penalize_filtered_pairs=args.penalize_filtered_emd,
+            use_gold_topics=args.use_gold_emd_topics,
         )
     else:
         raise ValueError("Not implemented yet")

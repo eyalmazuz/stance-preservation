@@ -15,6 +15,7 @@ from src.utils.text_utils import topics_match_soft
 
 class EMDScorer:
     TASK = "Retrieve semantically similar text."
+    DEFAULT_EMBEDDING_TOPIC_THRESHOLD = 0.80
     DEFAULT_STANCE_OUTPUT_ORDER = ["Favor", "Against", "Neutral"]
     LABEL_ALIASES = {
         "FAVOR": "Favor",
@@ -50,6 +51,8 @@ class EMDScorer:
         soft_topic_token_jaccard: float = 0.5,
         soft_topic_char_jaccard: float = 0.45,
         soft_topic_fuzzy_ratio: float = 0.82,
+        use_embedding_topic_filtering: bool = False,
+        embedding_topic_threshold: float = DEFAULT_EMBEDDING_TOPIC_THRESHOLD,
         use_dist_topic_score: bool = False,
         use_weighted_emd: bool = False,
         debug: bool = False,
@@ -79,6 +82,8 @@ class EMDScorer:
         self.soft_topic_token_jaccard = soft_topic_token_jaccard
         self.soft_topic_char_jaccard = soft_topic_char_jaccard
         self.soft_topic_fuzzy_ratio = soft_topic_fuzzy_ratio
+        self.use_embedding_topic_filtering = use_embedding_topic_filtering
+        self.embedding_topic_threshold = embedding_topic_threshold
         self.use_dist_topic_score = use_dist_topic_score
         self.use_weighted_emd = use_weighted_emd
         self.debug = debug
@@ -122,6 +127,8 @@ class EMDScorer:
         kept_pairs = 0
         exact_topic_matches = 0
         soft_topic_matches = 0
+        embedding_topic_matches = 0
+        embedding_topic_similarity_total = 0.0
         skipped_topic = 0
         skipped_entropy = 0
         for hyp_sentence, ref_sentence, sim, hyp_gold_topic, ref_gold_topic in tqdm(matched_pairs, leave=False):
@@ -147,9 +154,17 @@ class EMDScorer:
             )
             exact_topic_matches += int(exact_topics_match)
             soft_topic_matches += int(soft_topics_match)
+            embedding_topics_match = True
+            if self.use_embedding_topic_filtering:
+                embedding_topic_similarity = self.get_topic_similarity(hyp_topic, ref_topic)
+                embedding_topics_match = embedding_topic_similarity >= self.embedding_topic_threshold
+                embedding_topic_matches += int(embedding_topics_match)
+                embedding_topic_similarity_total += embedding_topic_similarity
 
-            topic_filtered = ((not exact_topics_match) and self.use_topic_filtering) or (
-                not soft_topics_match and self.use_soft_topic_filtering
+            topic_filtered = (
+                ((not exact_topics_match) and self.use_topic_filtering)
+                or (not soft_topics_match and self.use_soft_topic_filtering)
+                or (not embedding_topics_match and self.use_embedding_topic_filtering)
             )
             entropy_filtered = (Categorical(hyp_stance_probs).entropy() > self.entropy_threshold) or (
                 Categorical(ref_stance_probs).entropy() > self.entropy_threshold
@@ -199,9 +214,7 @@ class EMDScorer:
                 raise ValueError(f"Invalid score method: {self.score_method}")
 
             if self.use_dist_topic_score:
-                topic_similarity = (
-                    (self.encode_text([hyp_topic]) @ self.encode_text([ref_topic]).T).squeeze().cpu().item()
-                )
+                topic_similarity = self.get_topic_similarity(hyp_topic, ref_topic, use_matching_prompt=False)
                 emd_score += stance_dist + 0.5 * (1 - topic_similarity)
             elif self.use_weighted_emd:
                 emd_score += stance_dist * sim
@@ -210,9 +223,13 @@ class EMDScorer:
             kept += 1 if not self.use_weighted_emd else sim
             kept_pairs += 1
 
-        if self.debug and (self.use_topic_filtering or self.use_soft_topic_filtering):
+        if self.debug and (
+            self.use_topic_filtering or self.use_soft_topic_filtering or self.use_embedding_topic_filtering
+        ):
             exact_topic_match_rate = exact_topic_matches / total_pairs if total_pairs else 0.0
             soft_topic_match_rate = soft_topic_matches / total_pairs if total_pairs else 0.0
+            embedding_topic_match_rate = embedding_topic_matches / total_pairs if total_pairs else 0.0
+            mean_embedding_topic_similarity = embedding_topic_similarity_total / total_pairs if total_pairs else 0.0
             self.filter_stats.append(
                 {
                     "total_pairs": float(total_pairs),
@@ -221,6 +238,8 @@ class EMDScorer:
                     "entropy_skips": float(skipped_entropy),
                     "exact_topic_match_rate": exact_topic_match_rate,
                     "soft_topic_match_rate": soft_topic_match_rate,
+                    "embedding_topic_match_rate": embedding_topic_match_rate,
+                    "mean_embedding_topic_similarity": mean_embedding_topic_similarity,
                 }
             )
 
@@ -254,7 +273,11 @@ class EMDScorer:
         raise ValueError(f"Filtered-pair penalty is not defined for score method: {self.score_method}")
 
     def print_filter_summary(self) -> None:
-        if not self.debug or not (self.use_topic_filtering or self.use_soft_topic_filtering) or not self.filter_stats:
+        if (
+            not self.debug
+            or not (self.use_topic_filtering or self.use_soft_topic_filtering or self.use_embedding_topic_filtering)
+            or not self.filter_stats
+        ):
             return
 
         kept_pairs = np.array([stat["kept_pairs"] for stat in self.filter_stats], dtype=np.float64)
@@ -270,7 +293,7 @@ class EMDScorer:
         zero_kept_docs = int((kept_pairs == 0).sum())
         overall_keep_rate = kept_pairs.sum() / total_pairs.sum() if total_pairs.sum() else 0.0
 
-        print(
+        summary = (
             "EMD filtering summary: "
             f"docs={len(self.filter_stats)}, "
             f"mean_kept={kept_pairs.mean():.2f}, "
@@ -282,6 +305,22 @@ class EMDScorer:
             f"mean_exact_topic_match_rate={exact_topic_match_rates.mean():.1%}, "
             f"mean_soft_topic_match_rate={soft_topic_match_rates.mean():.1%}"
         )
+        if self.use_embedding_topic_filtering:
+            embedding_topic_match_rates = np.array(
+                [stat["embedding_topic_match_rate"] for stat in self.filter_stats],
+                dtype=np.float64,
+            )
+            embedding_topic_similarities = np.array(
+                [stat["mean_embedding_topic_similarity"] for stat in self.filter_stats],
+                dtype=np.float64,
+            )
+            summary += (
+                f", mean_embedding_topic_match_rate={embedding_topic_match_rates.mean():.1%}, "
+                f"mean_embedding_topic_similarity={embedding_topic_similarities.mean():.3f}, "
+                f"embedding_topic_threshold={self.embedding_topic_threshold:.3f}"
+            )
+
+        print(summary)
 
     def get_matching_model(self, model_name: str):
         model = SentenceTransformer(model_name)
@@ -339,6 +378,11 @@ class EMDScorer:
         matched_pairs = [(hyp_sentences[i], ref_sentences[j], best_sims[i].item()) for i, j in enumerate(best_cols)]
 
         return matched_pairs
+
+    def get_topic_similarity(self, hyp_topic: str, ref_topic: str, use_matching_prompt: bool = True) -> float:
+        hyp_embedding = self.encode_text([hyp_topic], is_query=use_matching_prompt)
+        ref_embedding = self.encode_text([ref_topic], is_query=False)
+        return (hyp_embedding @ ref_embedding.T).squeeze().cpu().item()
 
     def encode_text(self, texts: list[str], is_query: bool = False):
         if is_query:
