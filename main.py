@@ -242,6 +242,17 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
+def prediction_column_name(args: argparse.Namespace) -> str:
+    """Return a method-specific column name without conflating EMD variants."""
+    if args.model == "nli":
+        return f"nli_{args.nli_score_method}_preds"
+    if args.model == "emd":
+        return f"{args.emd_score_method}_preds"
+    if args.use_hebrew_morph_normalization:
+        return f"{args.model}_hebrew_morph_preds"
+    return f"{args.model}_preds"
+
+
 def main():
     args = parse_args()
     df = pl.read_csv(args.input_file)
@@ -334,11 +345,7 @@ def main():
                 file_ = f"{args.language}_scores_sentence.csv"
             case _:
                 raise ValueError(f"Invalid aggregate type: {args.aggregate_level}")
-        pred_col = f"{args.model}_preds"
-        if args.model == "nli":
-            pred_col = f"nli_{args.nli_score_method}_preds"
-        elif args.use_hebrew_morph_normalization:
-            pred_col = f"{args.model}_hebrew_morph_preds"
+        pred_col = prediction_column_name(args)
         pred_df = pl.from_dict(
             {
                 "article": [pair.article for pair in data],
@@ -352,9 +359,7 @@ def main():
         else:
             existing_df = pl.read_csv(f"./results/{file_}")
             existing_pred_cols = [
-                column
-                for column in existing_df.columns
-                if column not in {"article", "summary", "score", pred_col}
+                column for column in existing_df.columns if column not in {"article", "summary", "score", pred_col}
             ]
             df = pred_df.select(["article", "summary", "score"])
             if existing_pred_cols:

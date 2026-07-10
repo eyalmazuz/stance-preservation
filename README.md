@@ -285,6 +285,10 @@ python main.py \
 ```
 *(Similarly replace `--emd-score-method` with `js`, `argmax_ordinal`, `argmax_exact`, `euclidean`, or `itakura` to replicate results in [results/dist_ablation.txt](results/dist_ablation.txt).)*
 
+Each distance variant is saved to its own prediction column so that successive runs do not overwrite one another:
+`emd_preds`, `js_preds`, `kl_preds`, `argmax_ordinal_preds`, `argmax_exact_preds`, `euclidean_preds`, and
+`itakura_preds`.
+
 ### Inter-Annotator Agreement Heatmaps
 Generate a 2x2 grid plot of Cohen's Kappa agreements between all annotators (human and LLM) and write it to `figures/`:
 ```bash
