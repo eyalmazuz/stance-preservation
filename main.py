@@ -1,5 +1,7 @@
 import argparse
 import os
+import re
+from pathlib import Path
 
 import polars as pl
 
@@ -14,6 +16,21 @@ from src.utils.data_utils import process_data
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input-file", type=str, required=True, help="Path to the CSV file containing the data.")
+    parser.add_argument(
+        "--results-dir",
+        type=str,
+        default="./results",
+        help="Directory in which prediction CSVs are saved. Default: ./results.",
+    )
+    parser.add_argument(
+        "--result-tag",
+        type=str,
+        default=None,
+        help=(
+            "Suffix used in prediction filenames. By default it is derived from the input CSV stem for "
+            "non-canonical datasets; use an empty string to disable tagging."
+        ),
+    )
     parser.add_argument(
         "--label-prefix",
         type=str,
@@ -336,15 +353,21 @@ def main():
         scorer.print_filter_summary()
 
     if not args.no_save_preds and not bleu_topic_diagnostic:
-        if not os.path.exists("./results"):
-            os.makedirs("./results", exist_ok=True)
+        os.makedirs(args.results_dir, exist_ok=True)
         match args.aggregate_level:
             case "article":
-                file_ = f"{args.language}_scores_article.csv"
+                base_name = f"{args.language}_scores_article"
             case "sentence":
-                file_ = f"{args.language}_scores_sentence.csv"
+                base_name = f"{args.language}_scores_sentence"
             case _:
                 raise ValueError(f"Invalid aggregate type: {args.aggregate_level}")
+        canonical_stems = {"hebrew_normalized_majority", "english_normalized_majority"}
+        input_stem = Path(args.input_file).stem
+        result_tag = args.result_tag
+        if result_tag is None:
+            result_tag = "" if input_stem in canonical_stems else input_stem
+        result_tag = re.sub(r"[^A-Za-z0-9._-]+", "_", result_tag).strip("._-")
+        file_ = f"{base_name}{f'__{result_tag}' if result_tag else ''}.csv"
         pred_col = prediction_column_name(args)
         pred_df = pl.from_dict(
             {
@@ -354,10 +377,11 @@ def main():
                 pred_col: preds,
             }
         )
-        if not os.path.exists(f"./results/{file_}"):
+        output_path = os.path.join(args.results_dir, file_)
+        if not os.path.exists(output_path):
             df = pred_df
         else:
-            existing_df = pl.read_csv(f"./results/{file_}")
+            existing_df = pl.read_csv(output_path)
             existing_pred_cols = [
                 column for column in existing_df.columns if column not in {"article", "summary", "score", pred_col}
             ]
@@ -370,7 +394,8 @@ def main():
                 )
             df = df.join(pred_df.select(["article", "summary", pred_col]), on=["article", "summary"], how="left")
 
-        df.write_csv(f"./results/{file_}")
+        df.write_csv(output_path)
+        print(f"Saved predictions: {output_path}")
 
 
 if __name__ == "__main__":

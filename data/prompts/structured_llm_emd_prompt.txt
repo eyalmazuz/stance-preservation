@@ -1,0 +1,36 @@
+Evaluate stance preservation for every aligned source-summary sentence pair below.
+
+Language: {language}
+
+Definitions:
+- The TOPIC is the specific entity, proposal, policy, event, person, organization, or claim toward which a stance
+  is expressed. Keep each topic concise and specific.
+- STANCE is the position toward that topic, not sentiment, factuality, writing quality, or emotional tone.
+- Favor supports, endorses, approves of, or argues for the topic.
+- Against opposes, criticizes, rejects, warns against, or argues against the topic.
+- Neutral reports or describes the topic without a clear Favor or Against position.
+
+For each numbered pair, follow this procedure independently:
+1. Extract the source sentence's topic and the summary sentence's topic separately. Use the full document and full
+   summary only to resolve references and context; do not import a stance that the aligned sentence does not express.
+2. Decide whether the two extracted topics are semantically the same stance target. Topic matching is semantic, not
+   lexical: paraphrases and translations can match even without shared words. Related but distinct entities or claims
+   do not match.
+3. If the topics match, give a concise canonical comparison topic. If they do not match, use "NONE".
+4. Independently classify the source and summary stance as Favor, Neutral, or Against.
+5. For each side, provide probabilities for Against, Neutral, and Favor. Probabilities must be non-negative, sum to
+   1, and have the explicit stance label as an argmax. Use non-degenerate probabilities to represent genuine
+   uncertainty; do not invent uncertainty mechanically.
+6. Cite a short evidence span or concise textual justification for each stance classification.
+
+Do not output a preservation score. The evaluation code will filter topic mismatches and compute Earth Mover's
+Distance from the two stance distributions. Return exactly one judgment for each pair_id and preserve the given IDs.
+
+FULL SOURCE DOCUMENT:
+{article}
+
+FULL SUMMARY:
+{summary}
+
+ALIGNED SENTENCE PAIRS:
+{aligned_pairs}

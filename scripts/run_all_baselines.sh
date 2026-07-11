@@ -29,6 +29,7 @@ AGGREGATE_LEVELS=("sentence" "article")
 LANGUAGES=("en" "he")
 LABEL_PREFIX="majority"
 CUSTOM_DATA=""
+RESULTS_DIR="results"
 
 declare -A INPUT_FILES=(
   ["en"]="data/datasets/english_normalized_majority.csv"
@@ -48,6 +49,7 @@ Options:
   --aggregate LEVEL       Run only one aggregate level: sentence or article.
   --language LANG         Run only one language: en or he.
   --data PATH             Use a custom input CSV instead of the default for the selected language(s).
+  --results-dir PATH      Directory for prediction CSVs and run reports. Default: results.
   --prefix PREFIX         Label prefix to use, e.g. majority, annotator_A, annotator_B, GPT, Gemini.
   --models MODELS         Comma-separated or space-separated model list.
                           Example: --models bleu,rouge1,llm
@@ -108,6 +110,11 @@ while [[ "$#" -gt 0 ]]; do
       CUSTOM_DATA="$2"
       shift 2
       ;;
+    --results-dir)
+      [[ "$#" -ge 2 ]] || die "--results-dir requires a value"
+      RESULTS_DIR="$2"
+      shift 2
+      ;;
     --prefix)
       [[ "$#" -ge 2 ]] || die "--prefix requires a value"
       LABEL_PREFIX="$2"
@@ -162,6 +169,7 @@ run_one() {
     --aggregate-level "$aggregate_level"
     --model "$model"
     --label-prefix "$LABEL_PREFIX"
+    --results-dir "$RESULTS_DIR"
   )
 
   if [[ "$model" == "llm" ]]; then
@@ -198,7 +206,8 @@ run_one() {
 written_reports=()
 
 for aggregate_level in "${AGGREGATE_LEVELS[@]}"; do
-  report_file="results/all_baselines_${aggregate_level}.txt"
+  mkdir -p "$RESULTS_DIR"
+  report_file="$RESULTS_DIR/all_baselines_${aggregate_level}.txt"
   written_reports+=("$report_file")
   {
     echo "Stance preservation baseline results"
