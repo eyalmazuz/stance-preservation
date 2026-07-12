@@ -17,6 +17,7 @@ MODELS = OrderedDict([
     ("BLEU", "bleu_preds"), ("ROUGE-1", "rouge1_preds"),
     ("ROUGE-2", "rouge2_preds"), ("ROUGE-L", "rougeL_preds"),
     ("TF-IDF", "tf-idf_preds"), ("EMB", "emb_preds"), ("LLM", "llm_preds"),
+    ("NLI model", "nli_preservation_preds"),
     ("Structured LLM EMD", "structured_llm_emd_preds"),
     ("Structured LLM Argmax", "structured_llm_argmax_preds"),
     ("Ours-EMD", "emd_preds"), ("Ours-JS", "js_preds"),
@@ -147,7 +148,7 @@ def markdown(rows: list[dict[str, object]], n_bootstrap: int) -> str:
     lines = [
         "# Human-supported reference robustness: baseline bootstrap", "",
         f"Percentile 95% confidence intervals from {n_bootstrap:,} document-level bootstrap resamples. "
-        "NLI is intentionally omitted. Article-level EMB/LLM predictions are reused from the "
+        "Article-level EMB/LLM/NLI predictions are reused from the "
         "original run because filtering sentence annotations cannot change full-document predictions; their "
         "correlations are recomputed against the filtered reference scores. The structured LLM produces one "
         "document-level vector, reported in both column groups for comparison with the paper table. Following the "
