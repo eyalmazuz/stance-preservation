@@ -19,6 +19,7 @@ MODELS = OrderedDict([
     ("TF-IDF", "tf-idf_preds"), ("EMB", "emb_preds"), ("LLM", "llm_preds"),
     ("Structured LLM EMD", "structured_llm_emd_preds"),
     ("Structured LLM Argmax", "structured_llm_argmax_preds"),
+    ("Ours-EMD", "emd_preds"), ("Ours-JS", "js_preds"),
 ])
 STATS = OrderedDict([("Pearson", pearsonr), ("Spearman", spearmanr), ("Kendall", kendalltau)])
 FILES = {
@@ -36,6 +37,10 @@ STRUCTURED_FILES = {
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--results-dir", type=Path, default=Path("results/reference_robustness"))
+    parser.add_argument(
+        "--proposed-results-dir", type=Path, default=Path("results/reference_robustness_emd_js"),
+        help="Directory containing the human-supported EMD/JS sentence prediction files.",
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("rebuttal/reference_robustness/results"))
     parser.add_argument("--n-bootstrap", type=int, default=10_000)
     parser.add_argument("--seed", type=int, default=20260711)
@@ -73,13 +78,22 @@ def all_correlations(predictions: np.ndarray, gold: np.ndarray) -> dict[str, np.
     }
 
 
-def analyze(path: Path, language: str, level: str, n_bootstrap: int, seed: int) -> list[dict[str, object]]:
+def analyze(
+    path: Path,
+    proposed_path: Path,
+    language: str,
+    level: str,
+    n_bootstrap: int,
+    seed: int,
+) -> list[dict[str, object]]:
     frame = pl.read_csv(path)
     structured_path = path.parent / STRUCTURED_FILES[language]
     structured = pl.read_csv(structured_path).select([
         "article", "summary", "structured_llm_emd_preds", "structured_llm_argmax_preds",
     ])
     frame = frame.join(structured, on=["article", "summary"], how="left", validate="1:1")
+    proposed = pl.read_csv(proposed_path).select(["article", "summary", "emd_preds", "js_preds"])
+    frame = frame.join(proposed, on=["article", "summary"], how="left", validate="1:1")
     required = {"article", "summary", "score", *MODELS.values()}
     missing = sorted(required - set(frame.columns))
     if missing:
@@ -90,8 +104,10 @@ def analyze(path: Path, language: str, level: str, n_bootstrap: int, seed: int) 
     gold = frame["score"].to_numpy()
     prediction_matrix = np.column_stack([frame[column].to_numpy() for column in MODELS.values()])
     language_seed = 0 if language == "Hebrew" else 1
-    level_seed = 0 if level == "article" else 1
-    rng = np.random.default_rng(np.random.SeedSequence([seed, language_seed, level_seed]))
+    # Reuse the same document resamples across aggregation levels. This keeps
+    # document-level vectors that are intentionally shown in both table groups
+    # (structured LLM and Ours-EMD/JS) numerically identical, including CIs.
+    rng = np.random.default_rng(np.random.SeedSequence([seed, language_seed]))
     samples = rng.integers(0, len(frame), size=(n_bootstrap, len(frame)))
     all_indices = np.arange(len(frame))
     boot = {stat: np.empty((n_bootstrap, len(MODELS))) for stat in STATS}
@@ -131,10 +147,12 @@ def markdown(rows: list[dict[str, object]], n_bootstrap: int) -> str:
     lines = [
         "# Human-supported reference robustness: baseline bootstrap", "",
         f"Percentile 95% confidence intervals from {n_bootstrap:,} document-level bootstrap resamples. "
-        "NLI and the proposed EMD/JS methods are intentionally omitted. Article-level EMB/LLM predictions are reused from the "
+        "NLI is intentionally omitted. Article-level EMB/LLM predictions are reused from the "
         "original run because filtering sentence annotations cannot change full-document predictions; their "
         "correlations are recomputed against the filtered reference scores. The structured LLM produces one "
-        "document-level vector, reported in both column groups for comparison with the paper table.", "",
+        "document-level vector, reported in both column groups for comparison with the paper table. Following the "
+        "paper table convention, the sentence-aggregated Ours-EMD/JS document vectors are likewise reported in both "
+        "column groups.", "",
     ]
     for language in ("Hebrew", "English"):
         lines += [f"## {language}", "",
@@ -155,7 +173,19 @@ def main() -> None:
     args = parse_args()
     rows=[]
     for (language, level), filename in FILES.items():
-        rows.extend(analyze(args.results_dir / filename, language, level, args.n_bootstrap, args.seed))
+        proposed_filename = (
+            "he_scores_sentence__hebrew_human_supported_robustness.csv"
+            if language == "Hebrew"
+            else "en_scores_sentence__english_human_supported_robustness.csv"
+        )
+        rows.extend(analyze(
+            args.results_dir / filename,
+            args.proposed_results_dir / proposed_filename,
+            language,
+            level,
+            args.n_bootstrap,
+            args.seed,
+        ))
     args.output_dir.mkdir(parents=True, exist_ok=True)
     csv_path=args.output_dir / "baseline_bootstrap.csv"
     with csv_path.open("w", newline="", encoding="utf-8") as handle:
