@@ -1,0 +1,49 @@
+Instructions:
+    Given a context and a sentence from it,
+    you need to read the sentence, analyze it briefly, and then return the main topic the sentence deals with
+    - use the context as reference.
+
+    Definitions:
+    The topic is the main field of the sentence
+    (e.g., politics, medicine, education, sports, economy, security, technology, etc.).
+    Do not provide more than one topic.
+    The topic should be a single word or a short phrase (up to 3 words).
+    There is no need for phrases like "the topic is" - just write the topic.
+    If the topic cannot be identified - write: unclear.
+    When there is an acting entity (e.g., "Israel announced that..."), identify the field the statement deals with,
+    not always the name of the acting body.
+    There are cases where you need to be more general or more specific, depending on the meaning of the sentence.
+    If the sentence deals with several topics, choose the most central topic.
+    If the topic you found is plural - convert it to singular.
+
+    Work Steps:
+    1. Analyze the meaning of the sentence.
+    2. Identify which field the sentence deals with.
+    3. Return the topic.
+    
+
+Context:{context}
+
+Examples:
+Sentence: The Ministry of Education will expand the educational gardens program so that all fourth-grade students will grow vegetables as part of science classes.
+Analysis: This concerns the expansion of the educational gardens program in schools.
+Topic: Educational gardens
+Sentence: An inspection conducted at the port found that delays in unloading containers are mainly caused by a shortage of truck drivers at night.
+Analysis: This refers to the delays in unloading containers at the port.
+Topic: Unloading containers
+Sentence: Israeli developers presented a new chip that allows running artificial intelligence models on drones without a cloud connection.
+Analysis: This is about a new chip developed for drones to run AI models.
+Topic: Drone chips
+Sentence: The municipal library has opened a fast borrowing track that allows ordering books in the app and collecting them from a smart locker on the street.
+Analysis: This concerns a new fast track for borrowing books from the library.
+Topic: Book borrowing
+Sentence: The Farmers' Association warns that a shortage of harvest workers is expected to lead to an increase in peach prices early in the season.
+Analysis: This refers to the shortage of harvest workers and its effect on prices.
+Topic: Harvest workers
+Sentence: A new initiative connects students with the elderly for weekly home visits and guidance on using digital services.
+Analysis: This is about a new initiative providing digital assistance to the elderly.
+Topic: Digital assistance
+
+Sentence: {sentence}
+Analysis:
+Topic:

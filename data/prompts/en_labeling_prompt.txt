@@ -1,0 +1,19 @@
+For the following sentence: {sentence}
+
+Determine its topic (briefly, between one and four words if needed).
+Then check the stance of this sentence toward that topic.
+Does it support the topic, oppose it, or remain neutral toward it?
+
+Remember that stance is not sentiment.
+In other words, negative sentiment does not necessarily mean the stance is against, and positive sentiment does not necessarily mean the stance is in favor.
+
+Possible stances: [Favor, Against, Netural]
+
+
+### Output Format:
+your output format should be a JSON file containing the following fields:
+{{
+    "sentence": "{sentence}",
+    "article topic": "your topic here",
+    "article stance": "your stance here"
+}}

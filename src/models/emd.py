@@ -1,0 +1,524 @@
+import numpy as np
+import ot
+import torch
+import torch.nn.functional as F
+
+from sentence_transformers import SentenceTransformer
+from torch.distributions import Categorical
+from tqdm.auto import tqdm
+from transformers import AutoModelForCausalLM, AutoModelForSequenceClassification, AutoTokenizer, BitsAndBytesConfig
+
+from src.utils.data_utils import split_into_sentences
+from src.utils.prompt_utils import get_emd_prompt
+from src.utils.text_utils import topics_match_soft
+
+
+class EMDScorer:
+    TASK = "Retrieve semantically similar text."
+    DEFAULT_EMBEDDING_TOPIC_THRESHOLD = 0.80
+    DEFAULT_STANCE_OUTPUT_ORDER = ["Favor", "Against", "Neutral"]
+    LABEL_ALIASES = {
+        "FAVOR": "Favor",
+        "FAVOUR": "Favor",
+        "PRO": "Favor",
+        "SUPPORT": "Favor",
+        "SUPPORTS": "Favor",
+        "SUPPORTING": "Favor",
+        "בעד": "Favor",
+        "תומך": "Favor",
+        "AGAINST": "Against",
+        "CON": "Against",
+        "OPPOSE": "Against",
+        "OPPOSES": "Against",
+        "OPPOSING": "Against",
+        "נגד": "Against",
+        "מתנגד": "Against",
+        "NEUTRAL": "Neutral",
+        "NONE": "Neutral",
+        "נייטרלי": "Neutral",
+    }
+
+    def __init__(
+        self,
+        matching_model_name: str,
+        topic_model_name: str,
+        stance_model_name: str,
+        aggregate: str,
+        language: str = "he",
+        entropy_threshold: float = 0.0,
+        use_topic_filtering: bool = False,
+        use_soft_topic_filtering: bool = False,
+        soft_topic_token_jaccard: float = 0.5,
+        soft_topic_char_jaccard: float = 0.45,
+        soft_topic_fuzzy_ratio: float = 0.82,
+        use_embedding_topic_filtering: bool = False,
+        embedding_topic_threshold: float = DEFAULT_EMBEDDING_TOPIC_THRESHOLD,
+        use_dist_topic_score: bool = False,
+        use_weighted_emd: bool = False,
+        debug: bool = False,
+        score_method: str = "emd",
+        divide_by_sentence_count: bool = False,
+        penalize_filtered_pairs: bool = False,
+        use_gold_topics: bool = False,
+    ) -> None:
+        self.model_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model_dtype = (
+            torch.bfloat16 if self.model_device.type == "cuda" and torch.cuda.is_bf16_supported() else torch.float16
+        )
+        self.matching_model = self.get_matching_model(matching_model_name)
+        self.matching_model_name = matching_model_name
+        self.topic_model_name = topic_model_name
+        self.use_gold_topics = use_gold_topics
+        self.topic_model, self.topic_tokenizer = (
+            (None, None) if use_gold_topics else self.get_topic_model(topic_model_name)
+        )
+        self.stance_model, self.stance_tokenizer = self.get_stance_model(stance_model_name)
+        self.aggregate = aggregate
+        self.language = language
+        self.entropy_threshold = entropy_threshold if entropy_threshold != 0.0 else float("inf")
+        self.canonical_labels = ["Against", "Neutral", "Favor"]
+        self.use_topic_filtering = use_topic_filtering
+        self.use_soft_topic_filtering = use_soft_topic_filtering
+        self.soft_topic_token_jaccard = soft_topic_token_jaccard
+        self.soft_topic_char_jaccard = soft_topic_char_jaccard
+        self.soft_topic_fuzzy_ratio = soft_topic_fuzzy_ratio
+        self.use_embedding_topic_filtering = use_embedding_topic_filtering
+        self.embedding_topic_threshold = embedding_topic_threshold
+        self.use_dist_topic_score = use_dist_topic_score
+        self.use_weighted_emd = use_weighted_emd
+        self.debug = debug
+        self.score_method = score_method
+        self.divide_by_sentence_count = divide_by_sentence_count
+        self.penalize_filtered_pairs = penalize_filtered_pairs
+        self.filter_stats: list[dict[str, float]] = []
+        self.stance_value = {"Against": -1, "Neutral": 0, "Favor": 1}
+        self.C = np.array(
+            [
+                [abs(self.stance_value[a] - self.stance_value[b]) for b in self.canonical_labels]
+                for a in self.canonical_labels
+            ],
+            dtype=np.float64,
+        )
+
+    def score(self, hypotheses: str | list[dict[str, str]], references: str | list[dict[str, str]], **kwargs) -> float:
+        emd_score: float = 0.0
+
+        if isinstance(hypotheses, str) and isinstance(references, str):
+            if self.use_gold_topics:
+                raise ValueError("Gold EMD topics require sentence-level inputs with topic fields.")
+            hyp_sentences: list[str] = split_into_sentences(hypotheses)
+            ref_sentences: list[str] = split_into_sentences(references)
+            matched_pairs = [
+                (hyp_sentence, ref_sentence, sim, None, None)
+                for hyp_sentence, ref_sentence, sim in self.get_matching_pairs(hyp_sentences, ref_sentences)
+            ]
+            full_hyp = hypotheses
+            full_ref = references
+        elif isinstance(hypotheses, list) and isinstance(references, list):
+            matched_pairs = [
+                (hyp["text"], ref["text"], 1.0, hyp.get("topic"), ref.get("topic"))
+                for hyp, ref in zip(hypotheses, references, strict=True)
+            ]
+            full_hyp = hypotheses[0]["full_text"]
+            full_ref = references[0]["full_text"]
+
+        total_pairs = len(matched_pairs)
+        kept = 0.0
+        kept_pairs = 0
+        exact_topic_matches = 0
+        soft_topic_matches = 0
+        embedding_topic_matches = 0
+        embedding_topic_similarity_total = 0.0
+        skipped_topic = 0
+        skipped_entropy = 0
+        for hyp_sentence, ref_sentence, sim, hyp_gold_topic, ref_gold_topic in tqdm(matched_pairs, leave=False):
+            pair_weight = sim if self.use_weighted_emd else 1.0
+            if self.use_gold_topics:
+                if hyp_gold_topic is None or ref_gold_topic is None:
+                    raise ValueError("Gold EMD topics require topic fields on both hypothesis and reference data.")
+                hyp_topic = str(hyp_gold_topic)
+                ref_topic = str(ref_gold_topic)
+            else:
+                hyp_topic = self.get_topic(full_hyp, hyp_sentence)
+                ref_topic = self.get_topic(full_ref, ref_sentence)
+
+            hyp_stance_probs = self.get_stance(hyp_sentence, hyp_topic)
+            ref_stance_probs = self.get_stance(ref_sentence, ref_topic)
+
+            exact_topics_match = hyp_topic == ref_topic
+            soft_topics_match = topics_match_soft(
+                hyp_topic,
+                ref_topic,
+                token_jaccard_threshold=self.soft_topic_token_jaccard,
+                char_jaccard_threshold=self.soft_topic_char_jaccard,
+                fuzzy_ratio_threshold=self.soft_topic_fuzzy_ratio,
+            )
+            exact_topic_matches += int(exact_topics_match)
+            soft_topic_matches += int(soft_topics_match)
+            embedding_topics_match = True
+            if self.use_embedding_topic_filtering:
+                embedding_topic_similarity = self.get_topic_similarity(hyp_topic, ref_topic)
+                embedding_topics_match = embedding_topic_similarity >= self.embedding_topic_threshold
+                embedding_topic_matches += int(embedding_topics_match)
+                embedding_topic_similarity_total += embedding_topic_similarity
+
+            topic_filtered = (
+                ((not exact_topics_match) and self.use_topic_filtering)
+                or (not soft_topics_match and self.use_soft_topic_filtering)
+                or (not embedding_topics_match and self.use_embedding_topic_filtering)
+            )
+            entropy_filtered = (Categorical(hyp_stance_probs).entropy() > self.entropy_threshold) or (
+                Categorical(ref_stance_probs).entropy() > self.entropy_threshold
+            )
+
+            if topic_filtered:
+                skipped_topic += 1
+                if self.penalize_filtered_pairs:
+                    emd_score += self.filtered_pair_penalty() * pair_weight
+                    kept += pair_weight
+                continue
+
+            if entropy_filtered:
+                skipped_entropy += 1
+                if self.penalize_filtered_pairs:
+                    emd_score += self.filtered_pair_penalty() * pair_weight
+                    kept += pair_weight
+                continue
+
+            if self.score_method == "emd":
+                stance_dist = ot.emd2(
+                    ref_stance_probs.numpy().astype(np.float64),
+                    hyp_stance_probs.numpy().astype(np.float64),
+                    np.array(self.C).astype(np.float64),
+                )
+            elif self.score_method == "kl":
+                stance_dist = F.kl_div(torch.log(hyp_stance_probs + 1e-9), ref_stance_probs, reduction="sum").item()
+            elif self.score_method == "js":
+                m = 0.5 * (ref_stance_probs + hyp_stance_probs)
+                stance_dist = (
+                    0.5 * F.kl_div(torch.log(m + 1e-9), ref_stance_probs, reduction="sum").item()
+                    + 0.5 * F.kl_div(torch.log(m + 1e-9), hyp_stance_probs, reduction="sum").item()
+                )
+            elif self.score_method == "argmax_ordinal":
+                ref_label = self.canonical_labels[torch.argmax(ref_stance_probs).item()]
+                hyp_label = self.canonical_labels[torch.argmax(hyp_stance_probs).item()]
+                stance_dist = float(abs(self.stance_value[ref_label] - self.stance_value[hyp_label]))
+            elif self.score_method == "argmax_exact":
+                stance_dist = (
+                    0.0 if torch.argmax(ref_stance_probs).item() == torch.argmax(hyp_stance_probs).item() else 1.0
+                )
+            elif self.score_method == "euclidean":
+                stance_dist = torch.sum((ref_stance_probs - hyp_stance_probs) ** 2).item()
+            elif self.score_method == "itakura":
+                p = ref_stance_probs + 1e-9
+                q = hyp_stance_probs + 1e-9
+                stance_dist = torch.sum(p / q - torch.log(p / q) - 1).item()
+            else:
+                raise ValueError(f"Invalid score method: {self.score_method}")
+
+            if self.use_dist_topic_score:
+                topic_similarity = self.get_topic_similarity(hyp_topic, ref_topic, use_matching_prompt=False)
+                emd_score += stance_dist + 0.5 * (1 - topic_similarity)
+            elif self.use_weighted_emd:
+                emd_score += stance_dist * pair_weight
+            else:
+                emd_score += stance_dist
+            kept += pair_weight
+            kept_pairs += 1
+
+        if self.debug and (
+            self.use_topic_filtering or self.use_soft_topic_filtering or self.use_embedding_topic_filtering
+        ):
+            exact_topic_match_rate = exact_topic_matches / total_pairs if total_pairs else 0.0
+            soft_topic_match_rate = soft_topic_matches / total_pairs if total_pairs else 0.0
+            embedding_topic_match_rate = embedding_topic_matches / total_pairs if total_pairs else 0.0
+            mean_embedding_topic_similarity = embedding_topic_similarity_total / total_pairs if total_pairs else 0.0
+            self.filter_stats.append(
+                {
+                    "total_pairs": float(total_pairs),
+                    "kept_pairs": float(kept_pairs),
+                    "topic_skips": float(skipped_topic),
+                    "entropy_skips": float(skipped_entropy),
+                    "exact_topic_match_rate": exact_topic_match_rate,
+                    "soft_topic_match_rate": soft_topic_match_rate,
+                    "embedding_topic_match_rate": embedding_topic_match_rate,
+                    "mean_embedding_topic_similarity": mean_embedding_topic_similarity,
+                }
+            )
+
+        denominator = float(total_pairs) if self.divide_by_sentence_count else kept
+
+        if denominator == 0:
+            if self.score_method in ["kl", "js", "euclidean", "itakura"]:
+                return -2.0
+            return 0.0
+
+        avg_dist = float(emd_score / denominator)
+
+        if self.score_method in ["emd", "argmax_ordinal"]:
+            return 2.0 - avg_dist
+        elif self.score_method == "argmax_exact":
+            return 1.0 - avg_dist
+        elif self.score_method in ["kl", "js", "euclidean", "itakura"]:
+            return -avg_dist
+
+        return 2.0 - avg_dist
+
+    def filtered_pair_penalty(self) -> float:
+        if self.score_method in ["emd", "argmax_ordinal"]:
+            return 2.0
+        if self.score_method == "argmax_exact":
+            return 1.0
+        if self.score_method == "js":
+            return float(np.log(2.0))
+        if self.score_method == "euclidean":
+            return 2.0
+        raise ValueError(f"Filtered-pair penalty is not defined for score method: {self.score_method}")
+
+    def print_filter_summary(self) -> None:
+        if (
+            not self.debug
+            or not (self.use_topic_filtering or self.use_soft_topic_filtering or self.use_embedding_topic_filtering)
+            or not self.filter_stats
+        ):
+            return
+
+        kept_pairs = np.array([stat["kept_pairs"] for stat in self.filter_stats], dtype=np.float64)
+        total_pairs = np.array([stat["total_pairs"] for stat in self.filter_stats], dtype=np.float64)
+        exact_topic_match_rates = np.array(
+            [stat["exact_topic_match_rate"] for stat in self.filter_stats],
+            dtype=np.float64,
+        )
+        soft_topic_match_rates = np.array(
+            [stat["soft_topic_match_rate"] for stat in self.filter_stats],
+            dtype=np.float64,
+        )
+        zero_kept_docs = int((kept_pairs == 0).sum())
+        overall_keep_rate = kept_pairs.sum() / total_pairs.sum() if total_pairs.sum() else 0.0
+
+        summary = (
+            "EMD filtering summary: "
+            f"docs={len(self.filter_stats)}, "
+            f"mean_kept={kept_pairs.mean():.2f}, "
+            f"median_kept={np.median(kept_pairs):.2f}, "
+            f"min_kept={kept_pairs.min():.0f}, "
+            f"max_kept={kept_pairs.max():.0f}, "
+            f"zero_kept_docs={zero_kept_docs}, "
+            f"overall_keep_rate={overall_keep_rate:.1%}, "
+            f"mean_exact_topic_match_rate={exact_topic_match_rates.mean():.1%}, "
+            f"mean_soft_topic_match_rate={soft_topic_match_rates.mean():.1%}"
+        )
+        if self.use_embedding_topic_filtering:
+            embedding_topic_match_rates = np.array(
+                [stat["embedding_topic_match_rate"] for stat in self.filter_stats],
+                dtype=np.float64,
+            )
+            embedding_topic_similarities = np.array(
+                [stat["mean_embedding_topic_similarity"] for stat in self.filter_stats],
+                dtype=np.float64,
+            )
+            summary += (
+                f", mean_embedding_topic_match_rate={embedding_topic_match_rates.mean():.1%}, "
+                f"mean_embedding_topic_similarity={embedding_topic_similarities.mean():.3f}, "
+                f"embedding_topic_threshold={self.embedding_topic_threshold:.3f}"
+            )
+
+        print(summary)
+
+    def get_matching_model(self, model_name: str):
+        model = SentenceTransformer(model_name)
+        return model
+
+    def get_topic_model(self, model_name: str):
+        if self.model_device.type != "cuda":
+            raise RuntimeError("EMD topic model inference requires CUDA for 4-bit quantized loading.")
+
+        quant_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=self.model_dtype,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4",
+        )
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            device_map=self.model_device.type,
+            quantization_config=quant_config,
+        )
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+        tokenizer.pad_token = tokenizer.eos_token
+
+        return model, tokenizer
+
+    def get_stance_model(self, model_name: str):
+        model_kwargs = {}
+        if self.model_device.type == "cuda":
+            model_kwargs["torch_dtype"] = self.model_dtype
+
+        model = AutoModelForSequenceClassification.from_pretrained(model_name, **model_kwargs)
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        if tokenizer.pad_token is None and tokenizer.eos_token is not None:
+            tokenizer.pad_token = tokenizer.eos_token
+        if model.config.pad_token_id is None and tokenizer.pad_token_id is not None:
+            model.config.pad_token_id = tokenizer.pad_token_id
+        model.to(self.model_device)
+        model.eval()
+
+        return model, tokenizer
+
+    @staticmethod
+    def get_detailed_instruct(task_description: str, query: str) -> str:
+        return f"Instruct: {task_description}\nQuery: {query}"
+
+    def get_matching_pairs(self, hyp_sentences: list[str], ref_sentences: list[str]) -> list[tuple[str, str, float]]:
+
+        hyp_embeddings = self.encode_text(hyp_sentences, is_query=True)
+        ref_embeddings = self.encode_text(ref_sentences, is_query=False)
+
+        scores = hyp_embeddings @ ref_embeddings.T
+        best_sims, best_cols = scores.max(axis=1)
+        matched_pairs = [(hyp_sentences[i], ref_sentences[j], best_sims[i].item()) for i, j in enumerate(best_cols)]
+
+        return matched_pairs
+
+    def get_topic_similarity(self, hyp_topic: str, ref_topic: str, use_matching_prompt: bool = True) -> float:
+        hyp_embedding = self.encode_text([hyp_topic], is_query=use_matching_prompt)
+        ref_embedding = self.encode_text([ref_topic], is_query=False)
+        return (hyp_embedding @ ref_embedding.T).squeeze().cpu().item()
+
+    def encode_text(self, texts: list[str], is_query: bool = False):
+        if is_query:
+            match self.matching_model_name:
+                case "intfloat/multilingual-e5-large-instruct":
+                    texts_instruct: list[str] = [
+                        EMDScorer.get_detailed_instruct(EMDScorer.TASK, sentence) for sentence in texts
+                    ]
+                    return self.matching_model.encode(texts_instruct, convert_to_tensor=True, normalize_embeddings=True)
+                case "microsoft/harrier-oss-v1-0.6b":
+                    return self.matching_model.encode(texts, prompt_name="sts_query", convert_to_tensor=True)
+                case _:
+                    return self.matching_model.encode(texts, convert_to_tensor=True, normalize_embeddings=True)
+
+        return self.matching_model.encode(texts, convert_to_tensor=True, normalize_embeddings=True)
+
+    def get_topic(self, full_text: str, sentence: str) -> str:
+        if self.use_gold_topics:
+            raise ValueError("Topic generation is disabled when using gold EMD topics.")
+        prompt = get_emd_prompt(self.language).format(context=full_text, sentence=sentence)
+
+        if self.should_use_topic_chat_template():
+            messages = [{"role": "user", "content": prompt}]
+            inputs = self.topic_tokenizer.apply_chat_template(
+                messages,
+                tokenize=True,
+                add_generation_prompt=True,
+                return_tensors="pt",
+            ).to(self.topic_model.device)
+            prompt_length = inputs.shape[1]
+
+            with torch.no_grad():
+                outputs = self.topic_model.generate(
+                    inputs,
+                    do_sample=False,
+                    max_new_tokens=30 if self.language == "en" else 20,
+                    pad_token_id=self.topic_tokenizer.eos_token_id,
+                )
+
+            topic_tokens = outputs[0][prompt_length:]
+            topic = self.topic_tokenizer.decode(topic_tokens, skip_special_tokens=True).strip()
+            return topic.split("\n")[0].strip()
+
+        inputs = self.topic_tokenizer(prompt.strip(), return_tensors="pt", padding=True).to(self.topic_model.device)
+        prompt_length = inputs.input_ids.shape[1]
+
+        with torch.no_grad():
+            outputs = self.topic_model.generate(
+                inputs.input_ids,
+                attention_mask=inputs.attention_mask,
+                do_sample=False,
+                max_new_tokens=10,
+                pad_token_id=self.topic_tokenizer.eos_token_id,
+            )
+
+        topic_tokens = outputs[0][prompt_length:]
+        topic = self.topic_tokenizer.decode(topic_tokens, skip_special_tokens=True).strip()
+        return topic.split("\n")[0]
+
+    def should_use_topic_chat_template(self) -> bool:
+        return (
+            self.topic_model_name != "dicta-il/dictalm2.0"
+            and getattr(self.topic_tokenizer, "chat_template", None) is not None
+        )
+
+    def get_stance(self, sentence: str, topic: str):
+        if self.language == "he":
+            combined_input = f"{sentence} [SEP] {topic}"
+            inputs = self.stance_tokenizer(combined_input, return_tensors="pt", truncation=True, padding=True)
+            inputs = inputs.to(self.get_stance_device())
+            with torch.no_grad():
+                outputs = self.stance_model(**inputs)
+
+            logits = outputs.logits.double()
+            probs = F.softmax(logits, dim=1).squeeze()
+
+        elif self.language == "en":  # English
+            combined_input = f"TOPIC: {topic}\nTEXT: {sentence}"
+            inputs = self.stance_tokenizer(combined_input, return_tensors="pt", truncation=True, padding=True)
+            inputs = inputs.to(self.get_stance_device())
+            with torch.no_grad():
+                outputs = self.stance_model(**inputs)
+
+            logits = outputs.logits.double()
+            probs = F.softmax(logits, dim=-1).squeeze(0)
+        else:
+            raise ValueError(f"Invalid language: {self.language}")
+
+        return self.reorder_stance_probs(probs)
+
+    def get_stance_device(self) -> torch.device:
+        return next(self.stance_model.parameters()).device
+
+    def reorder_stance_probs(self, probs: torch.Tensor) -> torch.Tensor:
+        if probs.numel() != len(self.canonical_labels):
+            return self.normalize_stance_probs(probs)
+
+        output_order = self.get_stance_output_order() or self.DEFAULT_STANCE_OUTPUT_ORDER
+        if any(label not in output_order for label in self.canonical_labels):
+            return self.normalize_stance_probs(probs)
+
+        idx_map = [output_order.index(label) for label in self.canonical_labels]
+        return self.normalize_stance_probs(probs[idx_map])
+
+    @staticmethod
+    def normalize_stance_probs(probs: torch.Tensor) -> torch.Tensor:
+        probs = probs.detach().cpu().double()
+        total = probs.sum()
+        if not torch.isfinite(total) or total <= 0:
+            return torch.full_like(probs, 1.0 / probs.numel(), dtype=torch.float64)
+        return probs / total
+
+    def get_stance_output_order(self) -> list[str] | None:
+        id2label = getattr(self.stance_model.config, "id2label", None)
+        if not id2label:
+            return None
+
+        labels_by_index: dict[int, str] = {}
+        for raw_index, raw_label in id2label.items():
+            try:
+                index = int(raw_index)
+            except (TypeError, ValueError):
+                return None
+            label = self.normalize_stance_label(str(raw_label))
+            if label is None:
+                return None
+            labels_by_index[index] = label
+
+        return [labels_by_index[index] for index in sorted(labels_by_index)]
+
+    @classmethod
+    def normalize_stance_label(cls, label: str) -> str | None:
+        label_key = label.strip().replace("-", "_").replace(" ", "_").upper()
+        if "_" in label_key:
+            label_key = label_key.rsplit("_", maxsplit=1)[-1]
+        return cls.LABEL_ALIASES.get(label_key)
